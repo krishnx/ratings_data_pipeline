@@ -1,0 +1,53 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-ratings}
+      POSTGRES_USER:     ${POSTGRES_USER:-ratings}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ratings}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    command: >
+      postgres
+        -c work_mem=16MB
+        -c shared_buffers=256MB
+        -c effective_cache_size=768MB
+        -c synchronous_commit=off
+        -c random_page_cost=1.1
+        -c effective_io_concurrency=200
+        -c autovacuum_vacuum_scale_factor=0.01
+        -c autovacuum_analyze_scale_factor=0.005
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ratings}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    ports:
+      - "5432:5432"
+
+  api:
+    build: ./api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ratings}:${POSTGRES_PASSWORD:-ratings}@postgres:5432/${POSTGRES_DB:-ratings}
+      DATA_DIR:     /data
+      LOG_LEVEL:    ${LOG_LEVEL:-INFO}
+    volumes:
+      - ../data_main/data:/data:ro
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  postgres_data:

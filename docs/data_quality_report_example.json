@@ -1,0 +1,37 @@
+{
+  "entity_name": "Company A",
+  "source_file": "Company_A_Ratings.xlsm",
+  "extracted_at": "2024-01-15T10:29:55.089000",
+  "validation_status": "passed_with_warnings",
+  "completeness_pct": 100.0,
+  "validity_pct": 93.75,
+  "errors": [],
+  "warnings": [
+    {
+      "rule_id": "R12",
+      "rule_name": "currency_iso",
+      "level": "WARNING",
+      "message": "Reporting currency 'XYZ' is not a recognised ISO-4217 code",
+      "field": "reporting_currency",
+      "value": "XYZ"
+    }
+  ],
+  "rules": [
+    {"rule_id": "R01", "name": "entity_name_present",       "level": "ERROR",   "passed": true},
+    {"rule_id": "R02", "name": "corporate_sector_present",  "level": "ERROR",   "passed": true},
+    {"rule_id": "R03", "name": "currency_present",          "level": "ERROR",   "passed": true},
+    {"rule_id": "R04", "name": "country_present",           "level": "ERROR",   "passed": true},
+    {"rule_id": "R05", "name": "industry_segments_present", "level": "ERROR",   "passed": true},
+    {"rule_id": "R06", "name": "segment_weights_float",     "level": "ERROR",   "passed": true},
+    {"rule_id": "R07", "name": "metric_years_valid",        "level": "ERROR",   "passed": true},
+    {"rule_id": "R08", "name": "metrics_finite",            "level": "ERROR",   "passed": true},
+    {"rule_id": "R09", "name": "month_valid",               "level": "ERROR",   "passed": true},
+    {"rule_id": "R10", "name": "weights_sum_to_one",        "level": "ERROR",   "passed": true},
+    {"rule_id": "R11", "name": "each_weight_in_range",      "level": "ERROR",   "passed": true},
+    {"rule_id": "R12", "name": "currency_iso",              "level": "WARNING", "passed": false},
+    {"rule_id": "R13", "name": "rating_pattern",            "level": "WARNING", "passed": true},
+    {"rule_id": "R14", "name": "notch_pattern",             "level": "WARNING", "passed": true},
+    {"rule_id": "R15", "name": "min_two_metric_years",      "level": "WARNING", "passed": true},
+    {"rule_id": "R16", "name": "name_has_letters",          "level": "WARNING", "passed": true}
+  ]
+}
