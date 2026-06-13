@@ -1,0 +1,76 @@
+import re
+
+# ── Pipeline runner ───────────────────────────────────────────────────────────
+MAX_ATTEMPTS = 3
+BASE_DELAY_S = 0.5
+
+# ── Extractor ─────────────────────────────────────────────────────────────────
+SHEET_NAME = "MASTER"
+
+LABEL_ALIASES: dict[str, str] = {
+    "rated entity": "entity_name",
+    "corporatesector": "corporate_sector",
+    "corporate sector": "corporate_sector",
+    "rating methodologies applied": "rating_methodologies",
+    "industry risk": "industry_names",
+    "industry risk score": "industry_risk_scores",
+    "industry weight": "industry_weights",
+    "segmentation criteria": "segmentation_criteria",
+    "reporting currency/units": "reporting_currency",
+    "country of origin": "country_of_origin",
+    "accounting principles": "accounting_principles",
+    "end of business year": "business_year_end_month",
+    "business risk profile": "business_risk_profile",
+    "(blended) industry risk profile": "blended_industry_risk_profile",
+    "competitive positioning": "competitive_positioning",
+    "market share": "market_share",
+    "diversification": "diversification",
+    "operating profitability": "operating_profitability",
+    "sector/company-specific factors (1)": "sector_specific_factor_1",
+    "sector/company-specific factors (2)": "sector_specific_factor_2",
+    "financial risk profile": "financial_risk_profile",
+    "leverage": "leverage",
+    "interest cover": "interest_cover",
+    "cash flow cover": "cash_flow_cover",
+    "[scope credit metrics]": "scope_credit_metrics_header",
+}
+
+# Field names in the order the metric rows appear after the header
+METRIC_FIELDS: list[str] = [
+    "ebitda_interest_cover",
+    "debt_ebitda",
+    "ffo_debt",
+    "loan_value",
+    "focf_debt",
+    "liquidity",
+]
+
+# ── Validator ─────────────────────────────────────────────────────────────────
+KNOWN_ISO_CURRENCIES = {
+    "AED", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AUD", "AWG", "AZN",
+    "BAM", "BBD", "BDT", "BGN", "BHD", "BIF", "BMD", "BND", "BOB", "BRL",
+    "BSD", "BTN", "BWP", "BYN", "BZD", "CAD", "CDF", "CHF", "CLP", "CNY",
+    "COP", "CRC", "CUP", "CVE", "CZK", "DJF", "DKK", "DOP", "DZD", "EGP",
+    "ERN", "ETB", "EUR", "FJD", "FKP", "GBP", "GEL", "GHS", "GIP", "GMD",
+    "GNF", "GTQ", "GYD", "HKD", "HNL", "HRK", "HTG", "HUF", "IDR", "ILS",
+    "INR", "IQD", "IRR", "ISK", "JMD", "JOD", "JPY", "KES", "KGS", "KHR",
+    "KMF", "KPW", "KRW", "KWD", "KYD", "KZT", "LAK", "LBP", "LKR", "LRD",
+    "LSL", "LYD", "MAD", "MDL", "MGA", "MKD", "MMK", "MNT", "MOP", "MRU",
+    "MUR", "MVR", "MWK", "MXN", "MYR", "MZN", "NAD", "NGN", "NIO", "NOK",
+    "NPR", "NZD", "OMR", "PAB", "PEN", "PGK", "PHP", "PKR", "PLN", "PYG",
+    "QAR", "RON", "RSD", "RUB", "RWF", "SAR", "SBD", "SCR", "SDG", "SEK",
+    "SGD", "SHP", "SLL", "SOS", "SRD", "STN", "SVC", "SYP", "SZL", "THB",
+    "TJS", "TMT", "TND", "TOP", "TRY", "TTD", "TWD", "TZS", "UAH", "UGX",
+    "USD", "UYU", "UZS", "VES", "VND", "VUV", "WST", "XAF", "XCD", "XOF",
+    "XPF", "YER", "ZAR", "ZMW", "ZWL",
+}
+
+VALID_MONTHS = {
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+}
+
+RATING_PATTERN = re.compile(r"^(AAA|AA[+-]?|A[+-]?|BBB[+-]?|BB[+-]?|B[+-]?|CCC[+-]?|CC|C[+-]?|D|NR)$")
+NOTCH_PATTERN = re.compile(r"^[+-]\d+ notch(?:es)?$", re.IGNORECASE)
+
+PRESENCE_RULE_IDS = {"R01", "R02", "R03", "R04", "R05"}

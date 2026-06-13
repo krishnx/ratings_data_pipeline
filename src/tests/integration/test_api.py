@@ -36,15 +36,33 @@ def test_list_companies(client):
     r = client.get("/companies")
     assert r.status_code == 200
     data = r.json()
-    assert isinstance(data, list)
-    assert len(data) >= 1
+    assert "total" in data
+    assert "page" in data
+    assert "page_size" in data
+    assert "items" in data
+    assert isinstance(data["items"], list)
+    if not data["items"]:
+        pytest.skip("No companies in DB")
+    assert len(data["items"]) >= 1
+
+
+def test_list_companies_pagination(client):
+    r = client.get("/companies?page=1&page_size=1")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["page"] == 1
+    assert data["page_size"] == 1
+    assert len(data["items"]) <= 1
+    if data["total"] == 0:
+        pytest.skip("No companies in DB")
+    assert data["total"] >= 1
 
 
 def test_get_company_by_id(client):
     companies = client.get("/companies").json()
-    if not companies:
+    if not companies["items"]:
         pytest.skip("No companies in DB")
-    cid = companies[0]["company_id"]
+    cid = companies["items"][0]["company_id"]
     r = client.get(f"/companies/{cid}")
     assert r.status_code == 200
     body = r.json()
@@ -55,34 +73,37 @@ def test_get_company_by_id(client):
 
 def test_get_company_versions(client):
     companies = client.get("/companies").json()
-    if not companies:
+    if not companies["items"]:
         pytest.skip("No companies in DB")
-    cid = companies[0]["company_id"]
+    cid = companies["items"][0]["company_id"]
     r = client.get(f"/companies/{cid}/versions")
     assert r.status_code == 200
-    versions = r.json()
-    assert isinstance(versions, list)
-    assert len(versions) >= 1
+    data = r.json()
+    assert "total" in data
+    assert "items" in data
+    assert isinstance(data["items"], list)
+    assert len(data["items"]) >= 1
 
 
 def test_get_company_history(client):
     companies = client.get("/companies").json()
-    if not companies:
+    if not companies["items"]:
         pytest.skip("No companies in DB")
-    cid = companies[0]["company_id"]
+    cid = companies["items"][0]["company_id"]
     r = client.get(f"/companies/{cid}/history")
     assert r.status_code == 200
-    history = r.json()
-    assert isinstance(history, list)
-    for entry in history:
+    data = r.json()
+    assert "total" in data
+    assert "items" in data
+    for entry in data["items"]:
         assert "credit_metrics" in entry
 
 
 def test_compare_companies(client):
     companies = client.get("/companies").json()
-    if len(companies) < 1:
+    if len(companies["items"]) < 1:
         pytest.skip("Need at least 1 company")
-    ids = ",".join(str(c["company_id"]) for c in companies[:2])
+    ids = ",".join(str(c["company_id"]) for c in companies["items"][:2])
     r = client.get(f"/companies/compare?company_ids={ids}")
     assert r.status_code == 200
     body = r.json()
@@ -110,6 +131,13 @@ def test_list_snapshots(client):
     assert "items" in body
 
 
+def test_list_snapshots_x_total_count_header(client):
+    r = client.get("/snapshots")
+    assert r.status_code == 200
+    assert "x-total-count" in r.headers
+    assert int(r.headers["x-total-count"]) >= 0
+
+
 def test_list_snapshots_sector_filter(client):
     r = client.get("/snapshots")
     items = r.json().get("items", [])
@@ -135,15 +163,25 @@ def test_list_snapshots_pagination(client):
 def test_snapshots_latest(client):
     r = client.get("/snapshots/latest")
     assert r.status_code == 200
-    latest = r.json()
-    assert isinstance(latest, list)
+    data = r.json()
+    assert "total_count" in data
+    assert "items" in data
+    assert isinstance(data["items"], list)
+
+
+def test_snapshots_latest_pagination(client):
+    r = client.get("/snapshots/latest?page=1&page_size=1")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["total_count"] >= 0
+    assert len(data["items"]) <= 1
 
 
 def test_get_snapshot_by_id(client):
     snapshots = client.get("/snapshots/latest").json()
-    if not snapshots:
+    if not snapshots["items"]:
         pytest.skip("No snapshots in DB")
-    sid = snapshots[0]["id"]
+    sid = snapshots["items"][0]["id"]
     r = client.get(f"/snapshots/{sid}")
     assert r.status_code == 200
     body = r.json()
@@ -161,15 +199,28 @@ def test_get_nonexistent_snapshot_returns_404(client):
 def test_list_uploads(client):
     r = client.get("/uploads")
     assert r.status_code == 200
-    uploads = r.json()
-    assert isinstance(uploads, list)
+    data = r.json()
+    assert "total" in data
+    assert "page" in data
+    assert "page_size" in data
+    assert "items" in data
+    assert isinstance(data["items"], list)
+
+
+def test_list_uploads_pagination(client):
+    r = client.get("/uploads?page=1&page_size=1")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["page"] == 1
+    assert data["page_size"] == 1
+    assert len(data["items"]) <= 1
 
 
 def test_get_upload_details(client):
     uploads = client.get("/uploads").json()
-    if not uploads:
+    if not uploads["items"]:
         pytest.skip("No uploads in DB")
-    uid = uploads[0]["id"]
+    uid = uploads["items"][0]["id"]
     r = client.get(f"/uploads/{uid}/details")
     assert r.status_code == 200
     body = r.json()
@@ -178,9 +229,9 @@ def test_get_upload_details(client):
 
 def test_download_upload_file(client):
     uploads = client.get("/uploads").json()
-    if not uploads:
+    if not uploads["items"]:
         pytest.skip("No uploads in DB")
-    uid = uploads[0]["id"]
+    uid = uploads["items"][0]["id"]
     r = client.get(f"/uploads/{uid}/file")
     assert r.status_code == 200
     assert r.headers["content-type"] == "application/octet-stream"

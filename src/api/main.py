@@ -10,6 +10,8 @@ from api.db.session import SessionLocal
 from api.pipeline.runner import run_pipeline
 from api.routers import companies, snapshots, uploads
 
+from sqlalchemy import text
+
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
     format='{"time":"%(asctime)s","level":"%(levelname)s","name":"%(name)s","message":"%(message)s"}',
@@ -43,8 +45,6 @@ app.include_router(uploads.router)
 
 @app.get("/health", summary="Health check", tags=["health"])
 def health_check():
-    from sqlalchemy import text
-
     try:
         session = SessionLocal()
         session.execute(text("SELECT 1"))

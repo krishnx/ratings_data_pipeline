@@ -4,12 +4,8 @@ No DB access, no validation logic — only data normalization.
 """
 from dataclasses import dataclass
 
+from api.pipeline.constants import VALID_MONTHS
 from api.pipeline.extractor import CreditMetricYear, IndustrySegment, RawRecord
-
-VALID_MONTHS = {
-    "january", "february", "march", "april", "may", "june",
-    "july", "august", "september", "october", "november", "december",
-}
 
 
 @dataclass

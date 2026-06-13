@@ -80,6 +80,20 @@ class CompanyListItemOut(BaseModel):
     financial_risk_profile: str | None
 
 
+class CompanyListPageOut(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[CompanyListItemOut]
+
+
+class CompanySnapshotPageOut(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[CompanySnapshotOut]
+
+
 class CompareOut(BaseModel):
     as_of_date: datetime
     companies: list[CompanySnapshotOut]
@@ -112,6 +126,13 @@ class ValidationReportOut(BaseModel):
     warnings: list[dict]
     completeness_pct: float
     validity_pct: float
+
+
+class UploadListPageOut(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list["UploadListItemOut"]
 
 
 class UploadListItemOut(BaseModel):

@@ -9,34 +9,14 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable
 
+from api.pipeline.constants import (
+    KNOWN_ISO_CURRENCIES,
+    NOTCH_PATTERN,
+    PRESENCE_RULE_IDS,
+    RATING_PATTERN,
+    VALID_MONTHS,
+)
 from api.pipeline.extractor import RawRecord
-
-KNOWN_ISO_CURRENCIES = {
-    "AED", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AUD", "AWG", "AZN",
-    "BAM", "BBD", "BDT", "BGN", "BHD", "BIF", "BMD", "BND", "BOB", "BRL",
-    "BSD", "BTN", "BWP", "BYN", "BZD", "CAD", "CDF", "CHF", "CLP", "CNY",
-    "COP", "CRC", "CUP", "CVE", "CZK", "DJF", "DKK", "DOP", "DZD", "EGP",
-    "ERN", "ETB", "EUR", "FJD", "FKP", "GBP", "GEL", "GHS", "GIP", "GMD",
-    "GNF", "GTQ", "GYD", "HKD", "HNL", "HRK", "HTG", "HUF", "IDR", "ILS",
-    "INR", "IQD", "IRR", "ISK", "JMD", "JOD", "JPY", "KES", "KGS", "KHR",
-    "KMF", "KPW", "KRW", "KWD", "KYD", "KZT", "LAK", "LBP", "LKR", "LRD",
-    "LSL", "LYD", "MAD", "MDL", "MGA", "MKD", "MMK", "MNT", "MOP", "MRU",
-    "MUR", "MVR", "MWK", "MXN", "MYR", "MZN", "NAD", "NGN", "NIO", "NOK",
-    "NPR", "NZD", "OMR", "PAB", "PEN", "PGK", "PHP", "PKR", "PLN", "PYG",
-    "QAR", "RON", "RSD", "RUB", "RWF", "SAR", "SBD", "SCR", "SDG", "SEK",
-    "SGD", "SHP", "SLL", "SOS", "SRD", "STN", "SVC", "SYP", "SZL", "THB",
-    "TJS", "TMT", "TND", "TOP", "TRY", "TTD", "TWD", "TZS", "UAH", "UGX",
-    "USD", "UYU", "UZS", "VES", "VND", "VUV", "WST", "XAF", "XCD", "XOF",
-    "XPF", "YER", "ZAR", "ZMW", "ZWL",
-}
-
-VALID_MONTHS = {
-    "january", "february", "march", "april", "may", "june",
-    "july", "august", "september", "october", "november", "december",
-}
-
-RATING_PATTERN = re.compile(r"^(AAA|AA[+-]?|A[+-]?|BBB[+-]?|BB[+-]?|B[+-]?|CCC[+-]?|CC|C[+-]?|D|NR)$")
-NOTCH_PATTERN = re.compile(r"^[+-]\d+ notch(?:es)?$", re.IGNORECASE)
 
 
 class Severity(str, Enum):
@@ -292,9 +272,6 @@ RULE_REGISTRY: list[RuleFn] = [
     r16_company_name_not_only_special,
 ]
 
-_PRESENCE_RULE_IDS = {"R01", "R02", "R03", "R04", "R05"}
-
-
 def validate(record: RawRecord, registry: list[RuleFn] = RULE_REGISTRY) -> ValidationReport:
     results = [rule(record) for rule in registry]
     errors = [r for r in results if not r.passed and r.severity == Severity.ERROR]
@@ -303,7 +280,7 @@ def validate(record: RawRecord, registry: list[RuleFn] = RULE_REGISTRY) -> Valid
     total = len(results)
     passed_count = sum(1 for r in results if r.passed)
 
-    presence = [r for r in results if r.rule_id in _PRESENCE_RULE_IDS]
+    presence = [r for r in results if r.rule_id in PRESENCE_RULE_IDS]
     completeness_pct = (sum(1 for r in presence if r.passed) / len(presence) * 100.0) if presence else 100.0
     validity_pct = (passed_count / total * 100.0) if total else 100.0
 

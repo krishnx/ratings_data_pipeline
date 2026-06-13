@@ -1,29 +1,42 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from api.config import settings
 from api.db.session import get_session
 from api.models.orm import FactCompanySnapshot, UploadAudit, UploadFileStore
-from api.models.schemas import UploadDetailOut, UploadListItemOut, UploadStatsOut
+from api.models.schemas import UploadDetailOut, UploadListItemOut, UploadListPageOut, UploadStatsOut
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
 
-@router.get("", summary="List all ingested files", response_model=list[UploadListItemOut])
-def list_uploads(session: Session = Depends(get_session)):
-    rows = session.query(UploadAudit).order_by(UploadAudit.uploaded_at.desc()).all()
-    return [
+@router.get("", summary="List all ingested files", response_model=UploadListPageOut)
+def list_uploads(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
+    session: Session = Depends(get_session),
+):
+    total = session.query(func.count(UploadAudit.id)).scalar()
+    rows = (
+        session.query(UploadAudit)
+        .order_by(UploadAudit.uploaded_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    items = [
         UploadListItemOut(
-            id=r.id,
-            filename=r.filename,
-            uploaded_at=r.uploaded_at,
-            pipeline_run_id=r.pipeline_run_id,
-            byte_size=r.byte_size,
-            validation_status=r.validation_status,
+            id=row.id,
+            filename=row.filename,
+            uploaded_at=row.uploaded_at,
+            pipeline_run_id=row.pipeline_run_id,
+            byte_size=row.byte_size,
+            validation_status=row.validation_status,
         )
-        for r in rows
+        for row in rows
     ]
+    return UploadListPageOut(total=total, page=page, page_size=page_size, items=items)
 
 
 @router.get("/stats", summary="Aggregated upload and pipeline statistics", response_model=UploadStatsOut)

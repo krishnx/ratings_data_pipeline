@@ -17,6 +17,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from api.models.orm import DataLineage, PipelineState, UploadAudit
+from api.pipeline.constants import BASE_DELAY_S, MAX_ATTEMPTS
 from api.pipeline.exceptions import MissingSheetError
 from api.pipeline.extractor import MasterSheetExtractor, sha256_file
 from api.pipeline.loader import load
@@ -24,9 +25,6 @@ from api.pipeline.transformer import transform
 from api.pipeline.validator import validate
 
 log = logging.getLogger(__name__)
-
-MAX_ATTEMPTS = 3
-BASE_DELAY_S = 0.5
 
 
 def _record_lineage(
@@ -80,13 +78,13 @@ def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
 
     extractor = MasterSheetExtractor()
     per_file: list[dict] = []
-    files_processed = 0
-    files_skipped = 0
-    files_failed = 0
+    files_processed: int = 0
+    files_skipped: int = 0
+    files_failed: int = 0
     error_summary: list[dict] = []
 
     # Record pipeline run as 'running'
-    state_session = session_factory()
+    state_session: Session = session_factory()
     try:
         ps = PipelineState(
             run_id=run_id,
@@ -105,7 +103,7 @@ def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
         file_start_ms = time.monotonic()
         lineage_id = str(uuid.uuid4())
 
-        session = session_factory()
+        session: Session = session_factory()
         try:
             processed_hashes = _get_processed_hashes(session)
             file_sha256 = sha256_file(path)
