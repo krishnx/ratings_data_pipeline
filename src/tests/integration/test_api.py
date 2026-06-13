@@ -16,7 +16,7 @@ def seed_pipeline(db_session_factory):
 
     data_dir = os.environ.get(
         "TEST_DATA_DIR",
-        str(Path(__file__).parent.parent.parent.parent / "data_main" / "data"),
+        str(Path(__file__).parent.parent.parent.parent / "data"),
     )
     if Path(data_dir).exists():
         run_pipeline(data_dir, db_session_factory)
@@ -263,7 +263,7 @@ def test_pipeline_idempotency(db_session_factory):
 
     data_dir = os.environ.get(
         "TEST_DATA_DIR",
-        str(Path(__file__).parent.parent.parent.parent / "data_main" / "data"),
+        str(Path(__file__).parent.parent.parent.parent / "data"),
     )
     if not Path(data_dir).exists():
         pytest.skip("Data files not available")

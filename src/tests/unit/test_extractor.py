@@ -11,7 +11,7 @@ from api.pipeline.exceptions import MissingSheetError
 from api.pipeline.extractor import MasterSheetExtractor, _normalize, _is_int_year
 from tests.fixtures.master_sheet_rows import A1_ROWS, B1_ROWS
 
-DATA_DIR = Path(__file__).parent.parent.parent.parent / "data_main" / "data"
+DATA_DIR = Path(__file__).parent.parent.parent.parent / "data"
 A1_FILE = DATA_DIR / "corporates_A_1.xlsm"
 B1_FILE = DATA_DIR / "corporates_B_1.xlsm"
 

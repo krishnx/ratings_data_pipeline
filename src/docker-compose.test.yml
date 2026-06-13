@@ -26,7 +26,7 @@ services:
       DATA_DIR:     /data
       LOG_LEVEL:    DEBUG
     volumes:
-      - ../data_main/data:/data:ro
+      - ../data:/data:ro
     ports:
       - "8000:8000"
     healthcheck:
