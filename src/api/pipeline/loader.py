@@ -52,6 +52,7 @@ def load(
         filename: str,
         file_sha256: str,
         run_id: str,
+        file_store: FileStore | None = None,
 ) -> tuple[int, int]:
     """Load one file. Returns (upload_id, snapshot_id)."""
     _file_store: FileStore = file_store or DatabaseFileStore(session)
