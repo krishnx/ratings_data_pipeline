@@ -2,6 +2,7 @@
 EXPLAIN ANALYZE tests verifying that critical queries use index scans.
 Requires a seeded test database.
 """
+
 import pytest
 from sqlalchemy import text
 
@@ -9,6 +10,7 @@ from sqlalchemy import text
 @pytest.fixture
 def seeded_company_id(db_session):
     from api.models.orm import DimCompany
+
     company = db_session.query(DimCompany).first()
     if company is None:
         pytest.skip("No company in DB for query plan test")
@@ -46,13 +48,11 @@ def test_current_snapshot_partial_index(db_session, seeded_company_id):
 
 
 def test_sector_filter_uses_index(db_session):
-    result = db_session.execute(
-        text("""
+    result = db_session.execute(text("""
             EXPLAIN ANALYZE
             SELECT * FROM fact_company_snapshot
             WHERE corporate_sector = 'Automobiles & Parts'
             LIMIT 100
-        """)
-    ).fetchall()
+        """)).fetchall()
     plan = "\n".join(r[0] for r in result)
     assert "Scan" in plan

@@ -1,6 +1,7 @@
 """
 E2E tests — full container stack, real HTTP calls.
 """
+
 import requests
 
 API = "http://localhost:8000"

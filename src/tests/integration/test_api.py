@@ -3,6 +3,7 @@ Integration tests for all API endpoints against a real PostgreSQL test DB.
 Requires TEST_DATABASE_URL to point at a seeded database.
 Run: pytest tests/integration/ -v
 """
+
 import pytest
 
 
@@ -24,6 +25,7 @@ def seed_pipeline(db_session_factory):
 
 # ── Health ────────────────────────────────────────────────────────────────────
 
+
 def test_health(client):
     r = client.get("/health")
     assert r.status_code == 200
@@ -31,6 +33,7 @@ def test_health(client):
 
 
 # ── Companies ─────────────────────────────────────────────────────────────────
+
 
 def test_list_companies(client):
     r = client.get("/companies")
@@ -123,6 +126,7 @@ def test_get_nonexistent_company_returns_404(client):
 
 # ── Snapshots ─────────────────────────────────────────────────────────────────
 
+
 def test_list_snapshots(client):
     r = client.get("/snapshots")
     assert r.status_code == 200
@@ -196,6 +200,7 @@ def test_get_nonexistent_snapshot_returns_404(client):
 
 # ── Uploads ───────────────────────────────────────────────────────────────────
 
+
 def test_list_uploads(client):
     r = client.get("/uploads")
     assert r.status_code == 200
@@ -253,13 +258,14 @@ def test_nonexistent_upload_returns_404(client):
 
 # ── Idempotency ───────────────────────────────────────────────────────────────
 
+
 def test_pipeline_idempotency(db_session_factory):
     """Running pipeline twice must not create duplicate uploads."""
     import os
     from pathlib import Path
 
-    from api.pipeline.runner import run_pipeline
     from api.models.orm import UploadAudit
+    from api.pipeline.runner import run_pipeline
 
     data_dir = os.environ.get(
         "TEST_DATA_DIR",

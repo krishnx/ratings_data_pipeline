@@ -2,14 +2,14 @@
 Unit tests for MasterSheetExtractor using in-memory row fixtures.
 No I/O beyond reading real .xlsm files in integration tests.
 """
+
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from api.pipeline.exceptions import MissingSheetError
-from api.pipeline.extractor import MasterSheetExtractor, _normalize, _is_int_year
-from api.pipeline.protocols import SheetReader
+from api.pipeline.extractor import MasterSheetExtractor, _is_int_year, _normalize
 from tests.fixtures.master_sheet_rows import A1_ROWS, B1_ROWS
 
 DATA_DIR = Path(__file__).parent.parent.parent.parent / "data"

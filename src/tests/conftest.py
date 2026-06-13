@@ -2,6 +2,7 @@
 Shared fixtures for integration tests.
 Requires a running PostgreSQL instance (DATABASE_URL env var).
 """
+
 import os
 
 import pytest

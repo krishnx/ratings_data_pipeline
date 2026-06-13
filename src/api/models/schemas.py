@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -122,8 +123,8 @@ class SnapshotListOut(BaseModel):
 
 class ValidationReportOut(BaseModel):
     passed: bool
-    errors: list[dict]
-    warnings: list[dict]
+    errors: list[dict[str, Any]]
+    warnings: list[dict[str, Any]]
     completeness_pct: float
     validity_pct: float
 
@@ -155,7 +156,7 @@ class UploadDetailOut(BaseModel):
     pipeline_run_id: str
     byte_size: int | None
     validation_status: str
-    validation_report: dict | None
+    validation_report: dict[str, Any] | None
 
 
 class UploadStatsOut(BaseModel):

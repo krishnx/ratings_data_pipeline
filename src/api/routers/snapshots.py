@@ -30,20 +30,19 @@ def _to_list_item(snapshot: FactCompanySnapshot, entity_name: str) -> SnapshotLi
 
 @router.get("", summary="List snapshots with optional filters", response_model=SnapshotListOut)
 def list_snapshots(
-        response: Response,
-        company_id: int | None = Query(None),
-        from_date: datetime | None = Query(None),
-        to_date: datetime | None = Query(None),
-        sector: str | None = Query(None),
-        country: str | None = Query(None),
-        currency: str | None = Query(None),
-        page: int = Query(1, ge=1),
-        page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
-        session: Session = Depends(get_session),
-):
-    q = (
-        session.query(FactCompanySnapshot, DimCompany.entity_name)
-        .join(DimCompany, DimCompany.id == FactCompanySnapshot.company_id)
+    response: Response,
+    company_id: int | None = Query(None),
+    from_date: datetime | None = Query(None),
+    to_date: datetime | None = Query(None),
+    sector: str | None = Query(None),
+    country: str | None = Query(None),
+    currency: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
+    session: Session = Depends(get_session),
+) -> SnapshotListOut:
+    q = session.query(FactCompanySnapshot, DimCompany.entity_name).join(
+        DimCompany, DimCompany.id == FactCompanySnapshot.company_id
     )
     if company_id is not None:
         q = q.filter(FactCompanySnapshot.company_id == company_id)
@@ -70,10 +69,10 @@ def list_snapshots(
 
 @router.get("/latest", summary="Latest snapshot for each company", response_model=SnapshotListOut)
 def get_latest_snapshots(
-        page: int = Query(1, ge=1),
-        page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
-        session: Session = Depends(get_session),
-):
+    page: int = Query(1, ge=1),
+    page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
+    session: Session = Depends(get_session),
+) -> SnapshotListOut:
     base_query = (
         session.query(FactCompanySnapshot, DimCompany.entity_name)
         .join(DimCompany, DimCompany.id == FactCompanySnapshot.company_id)
@@ -92,7 +91,7 @@ def get_latest_snapshots(
     summary="Full snapshot detail including segments and metrics",
     response_model=CompanySnapshotOut,
 )
-def get_snapshot(snapshot_id: int, session: Session = Depends(get_session)):
+def get_snapshot(snapshot_id: int, session: Session = Depends(get_session)) -> CompanySnapshotOut:
     snapshot = (
         session.query(FactCompanySnapshot)
         .options(

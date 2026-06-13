@@ -14,10 +14,10 @@ router = APIRouter(prefix="/uploads", tags=["uploads"])
 
 @router.get("", summary="List all ingested files", response_model=UploadListPageOut)
 def list_uploads(
-        page: int = Query(1, ge=1),
-        page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
-        session: Session = Depends(get_session),
-):
+    page: int = Query(1, ge=1),
+    page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
+    session: Session = Depends(get_session),
+) -> UploadListPageOut:
     total = session.query(func.count(UploadAudit.id)).scalar()
     rows = (
         session.query(UploadAudit)
@@ -41,7 +41,7 @@ def list_uploads(
 
 
 @router.get("/stats", summary="Aggregated upload and pipeline statistics", response_model=UploadStatsOut)
-def get_upload_stats(session: Session = Depends(get_session)):
+def get_upload_stats(session: Session = Depends(get_session)) -> UploadStatsOut:
     total = session.query(UploadAudit).count()
     passed = session.query(UploadAudit).filter(UploadAudit.validation_status == "passed").count()
     warnings = session.query(UploadAudit).filter(UploadAudit.validation_status == "passed_with_warnings").count()
@@ -78,7 +78,7 @@ def get_upload_stats(session: Session = Depends(get_session)):
 
 
 @router.get("/{upload_id}/details", summary="Upload detail with validation report", response_model=UploadDetailOut)
-def get_upload_details(upload_id: int, session: Session = Depends(get_session)):
+def get_upload_details(upload_id: int, session: Session = Depends(get_session)) -> UploadDetailOut:
     row = session.query(UploadAudit).filter(UploadAudit.id == upload_id).one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Upload with id={upload_id} does not exist")
@@ -94,7 +94,7 @@ def get_upload_details(upload_id: int, session: Session = Depends(get_session)):
 
 
 @router.get("/{upload_id}/file", summary="Download the original .xlsm file")
-def download_file(upload_id: int, session: Session = Depends(get_session)):
+def download_file(upload_id: int, session: Session = Depends(get_session)) -> Response:
     try:
         file_bytes = DatabaseFileStore(session).load(upload_id)
     except FileNotFoundError:

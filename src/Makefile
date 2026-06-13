@@ -12,7 +12,10 @@ test-unit:
 	pytest tests/unit/ -v --cov=api --cov-report=term-missing
 
 test-integration:
-	pytest tests/integration/ -v
+	docker compose -f docker-compose.test.yml up -d postgres
+	until docker compose -f docker-compose.test.yml exec -T postgres pg_isready -U ratings; do sleep 1; done
+	TEST_DATABASE_URL="postgresql+psycopg://ratings:ratings@localhost:5432/ratings_test" \
+	  pytest tests/integration/ -v
 
 test-e2e:
 	docker compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from api

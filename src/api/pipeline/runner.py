@@ -6,11 +6,13 @@ Retry: transient DB errors retry up to MAX_ATTEMPTS times with exponential backo
 State: pipeline_state table records each run's outcome.
 Lineage: data_lineage table records each stage per file.
 """
+
 import logging
 import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
@@ -29,15 +31,15 @@ log = logging.getLogger(__name__)
 
 
 def _record_lineage(
-        session: Session,
-        lineage_id: str,
-        stage: str,
-        source_ref: str,
-        target_ref: str | None,
-        status: str,
-        upload_id: int | None = None,
-        snapshot_id: int | None = None,
-        metadata: dict | None = None,
+    session: Session,
+    lineage_id: str,
+    stage: str,
+    source_ref: str,
+    target_ref: str | None,
+    status: str,
+    upload_id: int | None = None,
+    snapshot_id: int | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     entry = DataLineage(
         lineage_id=lineage_id,
@@ -69,7 +71,7 @@ def _refresh_materialized_views(session: Session) -> None:
         session.rollback()
 
 
-def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
+def run_pipeline(data_dir: str, session_factory: sessionmaker[Session]) -> dict[str, Any]:
     run_id = f"run_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
     started_at = datetime.now(timezone.utc)
     started_ms = time.monotonic()
@@ -78,11 +80,11 @@ def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
     files_found = len(files)
 
     extractor = MasterSheetExtractor()
-    per_file: list[dict] = []
+    per_file: list[dict[str, Any]] = []
     files_processed: int = 0
     files_skipped: int = 0
     files_failed: int = 0
-    error_summary: list[dict] = []
+    error_summary: list[dict[str, Any]] = []
 
     # Record pipeline run as 'running'
     state_session: Session = session_factory()
@@ -117,8 +119,11 @@ def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
 
             # source stage
             _record_lineage(
-                session, lineage_id, stage="source",
-                source_ref=str(path), target_ref=file_sha256,
+                session,
+                lineage_id,
+                stage="source",
+                source_ref=str(path),
+                target_ref=file_sha256,
                 status="success",
             )
             session.commit()
@@ -128,9 +133,15 @@ def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
                 raw = extractor.extract(path)
             except MissingSheetError as exc:
                 log.warning("Extraction failed for %s: %s", filename, exc)
-                _record_lineage(session, lineage_id, stage="extracted",
-                                source_ref=file_sha256, target_ref=None,
-                                status="failed", metadata={"error": str(exc)})
+                _record_lineage(
+                    session,
+                    lineage_id,
+                    stage="extracted",
+                    source_ref=file_sha256,
+                    target_ref=None,
+                    status="failed",
+                    metadata={"error": str(exc)},
+                )
                 session.commit()
                 per_file.append({"file": filename, "status": "failed", "reason": str(exc)})
                 files_failed += 1
@@ -138,7 +149,9 @@ def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
                 continue
 
             _record_lineage(
-                session, lineage_id, stage="extracted",
+                session,
+                lineage_id,
+                stage="extracted",
                 source_ref=file_sha256,
                 target_ref=f"segments={len(raw.industry_segments)},years={len(raw.credit_metrics)}",
                 status="success",
@@ -149,7 +162,9 @@ def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
             # validate
             report = validate(raw)
             _record_lineage(
-                session, lineage_id, stage="validated",
+                session,
+                lineage_id,
+                stage="validated",
                 source_ref=file_sha256,
                 target_ref="passed" if report.passed else "failed",
                 status="success" if report.passed else "failed",
@@ -159,11 +174,14 @@ def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
 
             if not report.passed:
                 log.warning("Validation errors in %s — skipping load", filename)
-                per_file.append({
-                    "file": filename, "status": "failed",
-                    "reason": "validation_errors",
-                    "errors": [r.rule_id for r in report.errors],
-                })
+                per_file.append(
+                    {
+                        "file": filename,
+                        "status": "failed",
+                        "reason": "validation_errors",
+                        "errors": [r.rule_id for r in report.errors],
+                    }
+                )
                 files_failed += 1
                 error_summary.append({"file": filename, "errors": [r.rule_id for r in report.errors]})
                 continue
@@ -184,7 +202,9 @@ def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
             upload_id, snapshot_id = _load_with_retry()
 
             _record_lineage(
-                session, lineage_id, stage="loaded",
+                session,
+                lineage_id,
+                stage="loaded",
                 source_ref=file_sha256,
                 target_ref=f"snapshot_id={snapshot_id}",
                 status="success",
@@ -194,17 +214,17 @@ def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
             session.commit()
 
             duration_ms = int((time.monotonic() - file_start_ms) * 1000)
-            validation_status = (
-                "passed_with_warnings" if report.warnings else "passed"
+            validation_status = "passed_with_warnings" if report.warnings else "passed"
+            per_file.append(
+                {
+                    "file": filename,
+                    "status": "processed",
+                    "validation": validation_status,
+                    "industry_segments": len(domain.industry_segments),
+                    "credit_metric_years": len(domain.credit_metrics),
+                    "duration_ms": duration_ms,
+                }
             )
-            per_file.append({
-                "file": filename,
-                "status": "processed",
-                "validation": validation_status,
-                "industry_segments": len(domain.industry_segments),
-                "credit_metric_years": len(domain.credit_metrics),
-                "duration_ms": duration_ms,
-            })
             files_processed += 1
             log.info("Processed %s in %dms", filename, duration_ms)
 
@@ -220,11 +240,7 @@ def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
     total_duration_ms = int((time.monotonic() - started_ms) * 1000)
     finished_at = datetime.now(timezone.utc)
 
-    final_status = (
-        "success" if files_failed == 0
-        else "partial" if files_processed > 0
-        else "failed"
-    )
+    final_status = "success" if files_failed == 0 else "partial" if files_processed > 0 else "failed"
 
     # Update pipeline_state
     state_session = session_factory()

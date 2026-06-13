@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -18,7 +19,7 @@ from api.models.schemas import (
 router = APIRouter(prefix="/companies", tags=["companies"])
 
 
-def _snapshot_to_dict(snapshot: FactCompanySnapshot, entity_name: str) -> dict:
+def _snapshot_to_dict(snapshot: FactCompanySnapshot, entity_name: str) -> dict[str, Any]:
     return {
         "id": snapshot.id,
         "company_id": snapshot.company_id,
@@ -47,14 +48,24 @@ def _snapshot_to_dict(snapshot: FactCompanySnapshot, entity_name: str) -> dict:
         "liquidity_adjustment": snapshot.liquidity_adjustment,
         "rating_methodologies": snapshot.rating_methodologies or [],
         "industry_segments": [
-            {"index": seg.segment_index, "industry_name": seg.industry_name,
-             "risk_score": seg.risk_score, "weight": float(seg.weight)}
+            {
+                "index": seg.segment_index,
+                "industry_name": seg.industry_name,
+                "risk_score": seg.risk_score,
+                "weight": float(seg.weight),
+            }
             for seg in snapshot.industry_segments
         ],
         "credit_metrics": [
-            {"year": metric.metric_year, "ebitda_interest_cover": metric.ebitda_interest_cover,
-             "debt_ebitda": metric.debt_ebitda, "ffo_debt": metric.ffo_debt,
-             "loan_value": metric.loan_value, "focf_debt": metric.focf_debt, "liquidity": metric.liquidity}
+            {
+                "year": metric.metric_year,
+                "ebitda_interest_cover": metric.ebitda_interest_cover,
+                "debt_ebitda": metric.debt_ebitda,
+                "ffo_debt": metric.ffo_debt,
+                "loan_value": metric.loan_value,
+                "focf_debt": metric.focf_debt,
+                "liquidity": metric.liquidity,
+            }
             for metric in snapshot.credit_metrics
         ],
     }
@@ -62,11 +73,12 @@ def _snapshot_to_dict(snapshot: FactCompanySnapshot, entity_name: str) -> dict:
 
 @router.get("", summary="List all companies with their current snapshot", response_model=CompanyListPageOut)
 def list_companies(
-        page: int = Query(default=1, ge=1, description="Page number (1-based)"),
-        page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size,
-                               description="Items per page"),
-        session: Session = Depends(get_session),
-):
+    page: int = Query(default=1, ge=1, description="Page number (1-based)"),
+    page_size: int = Query(
+        default=settings.default_page_size, ge=1, le=settings.max_page_size, description="Items per page"
+    ),
+    session: Session = Depends(get_session),
+) -> CompanyListPageOut:
     base_query = (
         session.query(FactCompanySnapshot, DimCompany.entity_name)
         .join(DimCompany, DimCompany.id == FactCompanySnapshot.company_id)
@@ -99,10 +111,10 @@ def list_companies(
 
 @router.get("/compare", summary="Compare multiple companies at a point in time", response_model=CompareOut)
 def compare_companies(
-        company_ids: str = Query(..., description="Comma-separated company IDs"),
-        as_of_date: datetime | None = Query(None, description="ISO 8601 date (defaults to now)"),
-        session: Session = Depends(get_session),
-):
+    company_ids: str = Query(..., description="Comma-separated company IDs"),
+    as_of_date: datetime | None = Query(None, description="ISO 8601 date (defaults to now)"),
+    session: Session = Depends(get_session),
+) -> CompareOut:
     if not company_ids.strip():
         raise HTTPException(status_code=400, detail="company_ids must not be empty")
 
@@ -141,13 +153,14 @@ def compare_companies(
 
     return CompareOut(
         as_of_date=as_of,
-        companies=[CompanySnapshotOut(**_snapshot_to_dict(snapshot, snapshot.company.entity_name)) for snapshot in
-                   unique],
+        companies=[
+            CompanySnapshotOut(**_snapshot_to_dict(snapshot, snapshot.company.entity_name)) for snapshot in unique
+        ],
     )
 
 
 @router.get("/{company_id}", summary="Get latest snapshot for a company", response_model=CompanySnapshotOut)
-def get_company(company_id: int, session: Session = Depends(get_session)):
+def get_company(company_id: int, session: Session = Depends(get_session)) -> CompanySnapshotOut:
     snapshot = (
         session.query(FactCompanySnapshot)
         .options(
@@ -172,20 +185,19 @@ def get_company(company_id: int, session: Session = Depends(get_session)):
     response_model=CompanySnapshotPageOut,
 )
 def get_company_versions(
-        company_id: int,
-        page: int = Query(default=1, ge=1, description="Page number (1-based)"),
-        page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size,
-                               description="Items per page"),
-        session: Session = Depends(get_session),
-):
+    company_id: int,
+    page: int = Query(default=1, ge=1, description="Page number (1-based)"),
+    page_size: int = Query(
+        default=settings.default_page_size, ge=1, le=settings.max_page_size, description="Items per page"
+    ),
+    session: Session = Depends(get_session),
+) -> CompanySnapshotPageOut:
     company = session.query(DimCompany).filter(DimCompany.id == company_id).one_or_none()
     if company is None:
         raise HTTPException(status_code=404, detail=f"Company with id={company_id} does not exist")
 
     total = (
-        session.query(func.count(FactCompanySnapshot.id))
-        .filter(FactCompanySnapshot.company_id == company_id)
-        .scalar()
+        session.query(func.count(FactCompanySnapshot.id)).filter(FactCompanySnapshot.company_id == company_id).scalar()
     )
     snapshots = (
         session.query(FactCompanySnapshot)
@@ -209,20 +221,19 @@ def get_company_versions(
     response_model=CompanySnapshotPageOut,
 )
 def get_company_history(
-        company_id: int,
-        page: int = Query(default=1, ge=1, description="Page number (1-based)"),
-        page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size,
-                               description="Items per page"),
-        session: Session = Depends(get_session),
-):
+    company_id: int,
+    page: int = Query(default=1, ge=1, description="Page number (1-based)"),
+    page_size: int = Query(
+        default=settings.default_page_size, ge=1, le=settings.max_page_size, description="Items per page"
+    ),
+    session: Session = Depends(get_session),
+) -> CompanySnapshotPageOut:
     company = session.query(DimCompany).filter(DimCompany.id == company_id).one_or_none()
     if company is None:
         raise HTTPException(status_code=404, detail=f"Company with id={company_id} does not exist")
 
     total = (
-        session.query(func.count(FactCompanySnapshot.id))
-        .filter(FactCompanySnapshot.company_id == company_id)
-        .scalar()
+        session.query(func.count(FactCompanySnapshot.id)).filter(FactCompanySnapshot.company_id == company_id).scalar()
     )
     snapshots = (
         session.query(FactCompanySnapshot)

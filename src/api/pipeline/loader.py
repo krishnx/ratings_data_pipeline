@@ -8,6 +8,7 @@ SCD2 close-out:
   4. Insert upload_audit + upload_file_store.
   5. Commit everything atomically.
 """
+
 import logging
 from datetime import datetime, timezone
 
@@ -41,29 +42,26 @@ class DatabaseFileStore:
             raise FileNotFoundError(f"No file stored for upload_id={upload_id}")
         return bytes(row.raw_bytes)
 
+
 log = logging.getLogger(__name__)
 
 
 def load(
-        session: Session,
-        domain: DomainRecord,
-        report: ValidationReport,
-        raw_bytes: bytes,
-        filename: str,
-        file_sha256: str,
-        run_id: str,
-        file_store: FileStore | None = None,
+    session: Session,
+    domain: DomainRecord,
+    report: ValidationReport,
+    raw_bytes: bytes,
+    filename: str,
+    file_sha256: str,
+    run_id: str,
+    file_store: FileStore | None = None,
 ) -> tuple[int, int]:
     """Load one file. Returns (upload_id, snapshot_id)."""
     _file_store: FileStore = file_store or DatabaseFileStore(session)
     now = datetime.now(timezone.utc)
 
     # ── 1. Upsert dim_company ──────────────────────────────────────────
-    company = (
-        session.query(DimCompany)
-        .filter(DimCompany.entity_name == domain.entity_name)
-        .one_or_none()
-    )
+    company = session.query(DimCompany).filter(DimCompany.entity_name == domain.entity_name).one_or_none()
     if company is None:
         company = DimCompany(entity_name=domain.entity_name, created_at=now)
         session.add(company)
@@ -71,9 +69,7 @@ def load(
 
     # ── 2. Insert upload_audit ─────────────────────────────────────────
     validation_status = (
-        "passed" if (report.passed and not report.warnings)
-        else "passed_with_warnings" if report.passed
-        else "failed"
+        "passed" if (report.passed and not report.warnings) else "passed_with_warnings" if report.passed else "failed"
     )
     audit = UploadAudit(
         filename=filename,
@@ -166,6 +162,10 @@ def load(
     session.commit()
     log.info(
         "Loaded %s: company_id=%d upload_id=%d snapshot_id=%d version=%d",
-        filename, company.id, audit.id, snapshot.id, next_version,
+        filename,
+        company.id,
+        audit.id,
+        snapshot.id,
+        next_version,
     )
     return audit.id, snapshot.id

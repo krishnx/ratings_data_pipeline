@@ -2,17 +2,19 @@ import functools
 import logging
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypeVar, cast
 
 log = logging.getLogger(__name__)
 
+F = TypeVar("F", bound=Callable[..., Any])
+
 
 def retry(
-        *exc_types: type[Exception],
-        max_attempts: int = 3,
-        base_delay_s: float = 0.5,
-        on_retry: Callable[[Exception], None] | None = None,
-):
+    *exc_types: type[Exception],
+    max_attempts: int = 3,
+    base_delay_s: float = 0.5,
+    on_retry: Callable[[Exception], None] | None = None,
+) -> Callable[[F], F]:
     """Exponential-backoff retry decorator.
 
     Args:
@@ -25,7 +27,7 @@ def retry(
     if not exc_types:
         raise ValueError("retry() requires at least one exception type")
 
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+    def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             for attempt in range(max_attempts):
@@ -36,15 +38,19 @@ def retry(
                         raise
                     if attempt == max_attempts - 1:
                         raise
-                    delay = base_delay_s * (2 ** attempt)
+                    delay = base_delay_s * (2**attempt)
                     log.warning(
                         "Transient error in %s (attempt %d/%d), retrying in %.1fs: %s",
-                        func.__name__, attempt + 1, max_attempts, delay, exc,
+                        func.__name__,
+                        attempt + 1,
+                        max_attempts,
+                        delay,
+                        exc,
                     )
                     if on_retry is not None:
                         on_retry(exc)
                     time.sleep(delay)
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator

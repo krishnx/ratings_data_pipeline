@@ -2,6 +2,7 @@
 Transform a RawRecord into a clean DomainRecord ready for loading.
 No DB access, no validation logic — only data normalization.
 """
+
 from dataclasses import dataclass
 
 from api.pipeline.constants import VALID_MONTHS

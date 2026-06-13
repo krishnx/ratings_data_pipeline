@@ -12,6 +12,7 @@ Edge cases handled:
   EC-8  Float vs int weights — always cast to float
   EC-9  Missing MASTER sheet → MissingSheetError
 """
+
 import hashlib
 import math
 import unicodedata
@@ -83,7 +84,7 @@ class RawRecord:
 class OpenpyxlSheetReader:
     """Production SheetReader: opens an .xlsm with openpyxl and returns non-empty rows."""
 
-    def read_rows(self, path: str | Path, sheet_name: str) -> list[tuple]:
+    def read_rows(self, path: str | Path, sheet_name: str) -> list[tuple[Any, ...]]:
         try:
             wb = openpyxl.load_workbook(str(path), read_only=True, keep_vba=True)
         except Exception as exc:
@@ -115,7 +116,7 @@ def _normalize(raw: Any) -> str:
     return " ".join(s.strip().split()).lower()
 
 
-def _non_none(row: tuple, start: int = 2) -> list[Any]:
+def _non_none(row: tuple[Any, ...], start: int = 2) -> list[Any]:
     return [v for v in row[start:] if v is not None]
 
 
@@ -144,7 +145,7 @@ class MasterSheetExtractor:
     def extract(self, path: str | Path) -> RawRecord:
         path = Path(path)
         file_sha256 = sha256_file(path)
-        all_rows: list[tuple] = self._reader.read_rows(path, SHEET_NAME)
+        all_rows: list[tuple[Any, ...]] = self._reader.read_rows(path, SHEET_NAME)
 
         label_map: dict[str, list[Any]] = {}
         credit_header_idx: int | None = None
@@ -165,7 +166,7 @@ class MasterSheetExtractor:
             if canonical == "scope_credit_metrics_header":
                 credit_header_idx = row_idx
                 year_cols = [ci for ci, v in enumerate(row[2:], 2) if v is not None and _is_int_year(v)]
-                year_values = [int(row[ci]) for ci in year_cols]  # type: ignore[arg-type]
+                year_values = [int(row[ci]) for ci in year_cols]
                 label_map[canonical] = year_values
                 continue
 
@@ -225,11 +226,11 @@ class MasterSheetExtractor:
         )
 
     def _parse_credit_metrics(
-            self,
-            all_rows: list[tuple],
-            header_idx: int | None,
-            year_cols: list[int],
-            year_values: list[int],
+        self,
+        all_rows: list[tuple[Any, ...]],
+        header_idx: int | None,
+        year_cols: list[int],
+        year_values: list[int],
     ) -> list[CreditMetricYear]:
         if header_idx is None or not year_values:
             return []
@@ -238,7 +239,7 @@ class MasterSheetExtractor:
         year_data: dict[int, dict[str, float | None]] = {yr: {} for yr in year_values}
 
         metric_rows_seen = 0
-        for row in all_rows[header_idx + 1:]:
+        for row in all_rows[header_idx + 1 :]:
             if metric_rows_seen >= 6:
                 break
             raw_label = row[1] if len(row) > 1 else None

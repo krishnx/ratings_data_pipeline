@@ -1,4 +1,5 @@
 """Unit tests for the retry decorator in api.pipeline.utils."""
+
 import pytest
 
 from api.pipeline.utils import retry

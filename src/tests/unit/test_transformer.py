@@ -1,6 +1,7 @@
 """
 Unit tests for the transformer module.
 """
+
 from datetime import datetime, timezone
 
 from api.pipeline.extractor import CreditMetricYear, IndustrySegment, RawRecord
