@@ -24,6 +24,7 @@ import openpyxl
 
 from api.pipeline.constants import LABEL_ALIASES, METRIC_FIELDS, SHEET_NAME
 from api.pipeline.exceptions import ExtractionError, MissingSheetError
+from api.pipeline.protocols import SheetReader
 
 
 @dataclass
@@ -79,6 +80,24 @@ class RawRecord:
     credit_metrics: list[CreditMetricYear] = field(default_factory=list)
 
 
+class OpenpyxlSheetReader:
+    """Production SheetReader: opens an .xlsm with openpyxl and returns non-empty rows."""
+
+    def read_rows(self, path: str | Path, sheet_name: str) -> list[tuple]:
+        try:
+            wb = openpyxl.load_workbook(str(path), read_only=True, keep_vba=True)
+        except Exception as exc:
+            raise ExtractionError(f"Cannot open {Path(path).name}: {exc}") from exc
+
+        if sheet_name not in wb.sheetnames:
+            raise MissingSheetError(f"No '{sheet_name}' sheet in {Path(path).name}")
+
+        ws = wb[sheet_name]
+        rows = [r for r in ws.iter_rows(values_only=True) if any(v is not None for v in r)]  # EC-6
+        wb.close()
+        return rows
+
+
 def sha256_file(path: str | Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -119,22 +138,13 @@ def _is_int_year(v: Any) -> bool:
 
 
 class MasterSheetExtractor:
+    def __init__(self, reader: SheetReader | None = None) -> None:
+        self._reader: SheetReader = reader or OpenpyxlSheetReader()
+
     def extract(self, path: str | Path) -> RawRecord:
         path = Path(path)
         file_sha256 = sha256_file(path)
-
-        try:
-            wb = openpyxl.load_workbook(str(path), read_only=True, keep_vba=True)
-        except Exception as exc:
-            raise ExtractionError(f"Cannot open {path.name}: {exc}") from exc
-
-        if SHEET_NAME not in wb.sheetnames:
-            raise MissingSheetError(f"No '{SHEET_NAME}' sheet in {path.name}")
-
-        ws = wb[SHEET_NAME]
-        # EC-6: strip fully-empty rows
-        all_rows: list[tuple] = [r for r in ws.iter_rows(values_only=True) if any(v is not None for v in r)]
-        wb.close()
+        all_rows: list[tuple] = self._reader.read_rows(path, SHEET_NAME)
 
         label_map: dict[str, list[Any]] = {}
         credit_header_idx: int | None = None

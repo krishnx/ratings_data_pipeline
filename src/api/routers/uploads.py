@@ -5,8 +5,9 @@ from sqlalchemy.orm import Session
 
 from api.config import settings
 from api.db.session import get_session
-from api.models.orm import FactCompanySnapshot, UploadAudit, UploadFileStore
+from api.models.orm import FactCompanySnapshot, UploadAudit
 from api.models.schemas import UploadDetailOut, UploadListItemOut, UploadListPageOut, UploadStatsOut
+from api.pipeline.loader import DatabaseFileStore
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
@@ -94,13 +95,14 @@ def get_upload_details(upload_id: int, session: Session = Depends(get_session)):
 
 @router.get("/{upload_id}/file", summary="Download the original .xlsm file")
 def download_file(upload_id: int, session: Session = Depends(get_session)):
-    store = session.query(UploadFileStore).filter(UploadFileStore.upload_id == upload_id).one_or_none()
-    if store is None:
+    try:
+        file_bytes = DatabaseFileStore(session).load(upload_id)
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"File for upload id={upload_id} not found")
 
     audit = session.query(UploadAudit).filter(UploadAudit.id == upload_id).one()
     return Response(
-        content=bytes(store.raw_bytes),
+        content=file_bytes,
         media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{audit.filename}"'},
     )

@@ -21,8 +21,25 @@ from api.models.orm import (
     UploadAudit,
     UploadFileStore,
 )
+from api.pipeline.protocols import FileStore
 from api.pipeline.transformer import DomainRecord
 from api.pipeline.validator import ValidationReport
+
+
+class DatabaseFileStore:
+    """Production FileStore: persists raw bytes in the upload_file_store table."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def save(self, upload_id: int, data: bytes) -> None:
+        self._session.add(UploadFileStore(upload_id=upload_id, raw_bytes=data))
+
+    def load(self, upload_id: int) -> bytes:
+        row = self._session.query(UploadFileStore).filter(UploadFileStore.upload_id == upload_id).one_or_none()
+        if row is None:
+            raise FileNotFoundError(f"No file stored for upload_id={upload_id}")
+        return bytes(row.raw_bytes)
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +54,7 @@ def load(
         run_id: str,
 ) -> tuple[int, int]:
     """Load one file. Returns (upload_id, snapshot_id)."""
+    _file_store: FileStore = file_store or DatabaseFileStore(session)
     now = datetime.now(timezone.utc)
 
     # ── 1. Upsert dim_company ──────────────────────────────────────────
@@ -69,7 +87,7 @@ def load(
     session.flush()
 
     # ── 3. Store raw bytes ─────────────────────────────────────────────
-    session.add(UploadFileStore(upload_id=audit.id, raw_bytes=raw_bytes))
+    _file_store.save(audit.id, raw_bytes)
 
     # ── 4. SCD2 close-out ─────────────────────────────────────────────
     open_snapshot = (
