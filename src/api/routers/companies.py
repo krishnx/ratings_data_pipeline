@@ -62,9 +62,10 @@ def _snapshot_to_dict(snapshot: FactCompanySnapshot, entity_name: str) -> dict:
 
 @router.get("", summary="List all companies with their current snapshot", response_model=CompanyListPageOut)
 def list_companies(
-    page: int = Query(default=1, ge=1, description="Page number (1-based)"),
-    page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size, description="Items per page"),
-    session: Session = Depends(get_session),
+        page: int = Query(default=1, ge=1, description="Page number (1-based)"),
+        page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size,
+                               description="Items per page"),
+        session: Session = Depends(get_session),
 ):
     base_query = (
         session.query(FactCompanySnapshot, DimCompany.entity_name)
@@ -98,9 +99,9 @@ def list_companies(
 
 @router.get("/compare", summary="Compare multiple companies at a point in time", response_model=CompareOut)
 def compare_companies(
-    company_ids: str = Query(..., description="Comma-separated company IDs"),
-    as_of_date: datetime | None = Query(None, description="ISO 8601 date (defaults to now)"),
-    session: Session = Depends(get_session),
+        company_ids: str = Query(..., description="Comma-separated company IDs"),
+        as_of_date: datetime | None = Query(None, description="ISO 8601 date (defaults to now)"),
+        session: Session = Depends(get_session),
 ):
     if not company_ids.strip():
         raise HTTPException(status_code=400, detail="company_ids must not be empty")
@@ -140,7 +141,8 @@ def compare_companies(
 
     return CompareOut(
         as_of_date=as_of,
-        companies=[CompanySnapshotOut(**_snapshot_to_dict(snapshot, snapshot.company.entity_name)) for snapshot in unique],
+        companies=[CompanySnapshotOut(**_snapshot_to_dict(snapshot, snapshot.company.entity_name)) for snapshot in
+                   unique],
     )
 
 
@@ -170,10 +172,11 @@ def get_company(company_id: int, session: Session = Depends(get_session)):
     response_model=CompanySnapshotPageOut,
 )
 def get_company_versions(
-    company_id: int,
-    page: int = Query(default=1, ge=1, description="Page number (1-based)"),
-    page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size, description="Items per page"),
-    session: Session = Depends(get_session),
+        company_id: int,
+        page: int = Query(default=1, ge=1, description="Page number (1-based)"),
+        page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size,
+                               description="Items per page"),
+        session: Session = Depends(get_session),
 ):
     company = session.query(DimCompany).filter(DimCompany.id == company_id).one_or_none()
     if company is None:
@@ -206,10 +209,11 @@ def get_company_versions(
     response_model=CompanySnapshotPageOut,
 )
 def get_company_history(
-    company_id: int,
-    page: int = Query(default=1, ge=1, description="Page number (1-based)"),
-    page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size, description="Items per page"),
-    session: Session = Depends(get_session),
+        company_id: int,
+        page: int = Query(default=1, ge=1, description="Page number (1-based)"),
+        page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size,
+                               description="Items per page"),
+        session: Session = Depends(get_session),
 ):
     company = session.query(DimCompany).filter(DimCompany.id == company_id).one_or_none()
     if company is None:

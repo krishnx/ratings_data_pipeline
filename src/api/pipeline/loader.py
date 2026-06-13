@@ -28,13 +28,13 @@ log = logging.getLogger(__name__)
 
 
 def load(
-    session: Session,
-    domain: DomainRecord,
-    report: ValidationReport,
-    raw_bytes: bytes,
-    filename: str,
-    file_sha256: str,
-    run_id: str,
+        session: Session,
+        domain: DomainRecord,
+        report: ValidationReport,
+        raw_bytes: bytes,
+        filename: str,
+        file_sha256: str,
+        run_id: str,
 ) -> tuple[int, int]:
     """Load one file. Returns (upload_id, snapshot_id)."""
     now = datetime.now(timezone.utc)

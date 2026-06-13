@@ -272,6 +272,7 @@ RULE_REGISTRY: list[RuleFn] = [
     r16_company_name_not_only_special,
 ]
 
+
 def validate(record: RawRecord, registry: list[RuleFn] = RULE_REGISTRY) -> ValidationReport:
     results = [rule(record) for rule in registry]
     errors = [r for r in results if not r.passed and r.severity == Severity.ERROR]

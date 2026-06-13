@@ -30,16 +30,16 @@ def _to_list_item(snapshot: FactCompanySnapshot, entity_name: str) -> SnapshotLi
 
 @router.get("", summary="List snapshots with optional filters", response_model=SnapshotListOut)
 def list_snapshots(
-    response: Response,
-    company_id: int | None = Query(None),
-    from_date: datetime | None = Query(None),
-    to_date: datetime | None = Query(None),
-    sector: str | None = Query(None),
-    country: str | None = Query(None),
-    currency: str | None = Query(None),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
-    session: Session = Depends(get_session),
+        response: Response,
+        company_id: int | None = Query(None),
+        from_date: datetime | None = Query(None),
+        to_date: datetime | None = Query(None),
+        sector: str | None = Query(None),
+        country: str | None = Query(None),
+        currency: str | None = Query(None),
+        page: int = Query(1, ge=1),
+        page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
+        session: Session = Depends(get_session),
 ):
     q = (
         session.query(FactCompanySnapshot, DimCompany.entity_name)
@@ -70,9 +70,9 @@ def list_snapshots(
 
 @router.get("/latest", summary="Latest snapshot for each company", response_model=SnapshotListOut)
 def get_latest_snapshots(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
-    session: Session = Depends(get_session),
+        page: int = Query(1, ge=1),
+        page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
+        session: Session = Depends(get_session),
 ):
     base_query = (
         session.query(FactCompanySnapshot, DimCompany.entity_name)

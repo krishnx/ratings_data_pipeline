@@ -215,11 +215,11 @@ class MasterSheetExtractor:
         )
 
     def _parse_credit_metrics(
-        self,
-        all_rows: list[tuple],
-        header_idx: int | None,
-        year_cols: list[int],
-        year_values: list[int],
+            self,
+            all_rows: list[tuple],
+            header_idx: int | None,
+            year_cols: list[int],
+            year_values: list[int],
     ) -> list[CreditMetricYear]:
         if header_idx is None or not year_values:
             return []
@@ -228,7 +228,7 @@ class MasterSheetExtractor:
         year_data: dict[int, dict[str, float | None]] = {yr: {} for yr in year_values}
 
         metric_rows_seen = 0
-        for row in all_rows[header_idx + 1 :]:
+        for row in all_rows[header_idx + 1:]:
             if metric_rows_seen >= 6:
                 break
             raw_label = row[1] if len(row) > 1 else None

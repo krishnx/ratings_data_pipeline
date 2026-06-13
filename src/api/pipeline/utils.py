@@ -8,10 +8,10 @@ log = logging.getLogger(__name__)
 
 
 def retry(
-    *exc_types: type[Exception],
-    max_attempts: int = 3,
-    base_delay_s: float = 0.5,
-    on_retry: Callable[[Exception], None] | None = None,
+        *exc_types: type[Exception],
+        max_attempts: int = 3,
+        base_delay_s: float = 0.5,
+        on_retry: Callable[[Exception], None] | None = None,
 ):
     """Exponential-backoff retry decorator.
 

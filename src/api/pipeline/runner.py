@@ -29,15 +29,15 @@ log = logging.getLogger(__name__)
 
 
 def _record_lineage(
-    session: Session,
-    lineage_id: str,
-    stage: str,
-    source_ref: str,
-    target_ref: str | None,
-    status: str,
-    upload_id: int | None = None,
-    snapshot_id: int | None = None,
-    metadata: dict | None = None,
+        session: Session,
+        lineage_id: str,
+        stage: str,
+        source_ref: str,
+        target_ref: str | None,
+        status: str,
+        upload_id: int | None = None,
+        snapshot_id: int | None = None,
+        metadata: dict | None = None,
 ) -> None:
     entry = DataLineage(
         lineage_id=lineage_id,

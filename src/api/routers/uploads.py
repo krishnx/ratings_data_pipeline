@@ -13,9 +13,9 @@ router = APIRouter(prefix="/uploads", tags=["uploads"])
 
 @router.get("", summary="List all ingested files", response_model=UploadListPageOut)
 def list_uploads(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
-    session: Session = Depends(get_session),
+        page: int = Query(1, ge=1),
+        page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
+        session: Session = Depends(get_session),
 ):
     total = session.query(func.count(UploadAudit.id)).scalar()
     rows = (
