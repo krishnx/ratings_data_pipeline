@@ -22,6 +22,7 @@ from api.pipeline.exceptions import MissingSheetError
 from api.pipeline.extractor import MasterSheetExtractor, sha256_file
 from api.pipeline.loader import load
 from api.pipeline.transformer import transform
+from api.pipeline.utils import retry
 from api.pipeline.validator import validate
 
 log = logging.getLogger(__name__)
@@ -114,7 +115,7 @@ def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
                 files_skipped += 1
                 continue
 
-            # ── source stage ──────────────────────────────────────────
+            # source stage
             _record_lineage(
                 session, lineage_id, stage="source",
                 source_ref=str(path), target_ref=file_sha256,
@@ -122,7 +123,7 @@ def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
             )
             session.commit()
 
-            # ── extract ───────────────────────────────────────────────
+            # extract
             try:
                 raw = extractor.extract(path)
             except MissingSheetError as exc:
@@ -145,7 +146,7 @@ def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
             )
             session.commit()
 
-            # ── validate ─────────────────────────────────────────────
+            # validate
             report = validate(raw)
             _record_lineage(
                 session, lineage_id, stage="validated",
@@ -167,28 +168,20 @@ def run_pipeline(data_dir: str, session_factory: sessionmaker) -> dict:
                 error_summary.append({"file": filename, "errors": [r.rule_id for r in report.errors]})
                 continue
 
-            # ── transform + load (with retry) ─────────────────────────
+            # transform + load (with retry)
             domain = transform(raw)
             raw_bytes = path.read_bytes()
 
-            upload_id: int | None = None
-            snapshot_id: int | None = None
+            @retry(
+                OperationalError,
+                max_attempts=MAX_ATTEMPTS,
+                base_delay_s=BASE_DELAY_S,
+                on_retry=lambda _: session.rollback(),
+            )
+            def _load_with_retry() -> tuple[int, int]:
+                return load(session, domain, report, raw_bytes, filename, file_sha256, run_id)
 
-            for attempt in range(MAX_ATTEMPTS):
-                try:
-                    upload_id, snapshot_id = load(
-                        session, domain, report, raw_bytes,
-                        filename, file_sha256, run_id,
-                    )
-                    break
-                except OperationalError as exc:
-                    if attempt == MAX_ATTEMPTS - 1:
-                        raise
-                    delay = BASE_DELAY_S * (2 ** attempt)
-                    log.warning("Transient DB error (attempt %d/%d), retrying in %.1fs: %s",
-                                attempt + 1, MAX_ATTEMPTS, delay, exc)
-                    session.rollback()
-                    time.sleep(delay)
+            upload_id, snapshot_id = _load_with_retry()
 
             _record_lineage(
                 session, lineage_id, stage="loaded",
