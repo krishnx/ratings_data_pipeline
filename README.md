@@ -252,8 +252,9 @@ make format            # black + isort
 ratings_data_pipeline/
 ├── data/                          # .xlsm input files (gitignored)
 ├── docs/
-│   ├── api_examples.md        # curl examples for every endpoint
-│   └── data_quality_report_example.json
+│   ├── api_examples.md                    # curl examples for every endpoint
+│   ├── data_quality_report_example.json   # sample validation report output
+│   └── pipeline_execution_log_example.txt # sample pipeline run log
 └── src/
     ├── docker-compose.yml          # production stack
     ├── docker-compose.test.yml     # test stack (isolated DB)

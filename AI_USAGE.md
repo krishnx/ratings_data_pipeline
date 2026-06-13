@@ -10,7 +10,7 @@
 
 | Component | AI Tool | Nature of Assistance |
 |-----------|---------|---------------------|
-| `data_main/PLAN.md` | Claude | Full architecture design: star schema, SCD2, index strategy, SOLID patterns, test pyramid |
+| `PLAN.md` | Claude | Full architecture design: star schema, SCD2, index strategy, SOLID patterns, test pyramid |
 | `src/migrations/init.sql` | Claude | DDL with materialized views, covering indexes, BRIN, GIN, partial indexes, generated tsvector column |
 | `src/api/pipeline/extractor.py` | Claude | MASTER sheet parsing algorithm, all 9 edge cases (EC-1..9), label normalization, SHA-256 idempotency |
 | `src/api/pipeline/validator.py` | Claude | 16-rule validation framework (R01–R16), RULE_REGISTRY pattern, ValidationReport structure |

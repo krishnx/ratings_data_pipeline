@@ -15,7 +15,7 @@ test-integration:
 	pytest tests/integration/ -v
 
 test-e2e:
-	docker-compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from api
+	docker compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from api
 
 test-perf:
 	pytest tests/performance/unit/ --benchmark-only --benchmark-compare
