@@ -2,7 +2,7 @@
 
 > Based on direct inspection of all four `.xlsm` source files and the full README specification.
 > Written: 2026-06-11
-> Updated: SOLID & DRY architecture, flake8 linting, full test pyramid (unit / integration / e2e), architectural diagrams
+> Updated: SOLID & DRY architecture, flake8 linting, full test pyramid (unit / integration / e2e), architectural diagrams, concurrent pipeline (§16)
 
 ---
 
@@ -88,6 +88,7 @@
 13. [Scale & Production Considerations](#13-scale--production-considerations)
 14. [Build Order](#14-build-order)
 15. [Deliverables Checklist](#15-deliverables-checklist)
+16. [Concurrent Pipeline Architecture](#16-concurrent-pipeline-architecture)
 
 ---
 
@@ -476,7 +477,9 @@ data_main/
 │       ├── validator.py                # SRP: RawRecord → ValidationReport; no DB, no parsing
 │       ├── transformer.py              # SRP: RawRecord → DomainRecord; no DB, no rules
 │       ├── loader.py                   # SRP: DomainRecord → DB; no parsing, no validation
-│       ├── runner.py                   # SRP: orchestration only; calls E→V→T→L via protocols
+│       ├── runner.py                   # Orchestration: two-pool producer-consumer (§16)
+│       ├── worker_cpu.py               # ProcessPoolExecutor worker: hash/extract/validate/transform
+│       ├── worker_io.py                # ThreadPoolExecutor worker: lineage write/load/commit
 │       ├── protocols.py                # DIP: SheetReader, FileStore, Validator, Loader protocols
 │       └── exceptions.py              # Pipeline-specific exception hierarchy
 │
@@ -487,7 +490,9 @@ data_main/
 │   ├── unit/
 │   │   ├── test_extractor.py           # 11 tests (see §11.2)
 │   │   ├── test_validator.py           # 15 parametrized tests
-│   │   └── test_transformer.py         # 4 tests
+│   │   ├── test_transformer.py         # 4 tests
+│   │   ├── test_worker_cpu.py          # 11 tests (see §16.7)
+│   │   └── test_worker_io.py           # 13 tests (see §16.7)
 │   ├── integration/
 │   │   ├── test_api.py                 # 20 endpoint tests against real test DB
 │   │   └── test_openapi.py             # 5 OpenAPI completeness tests
@@ -2367,12 +2372,13 @@ These are design decisions made now that avoid costly rewrites later. None add s
 
 **Problem:** At 100+ files/day, single-threaded extraction blocks the API startup hook.
 
-**Design now:**
-- `runner.py` processes files in a loop, but each file is independently transactional — trivial to parallelize later with `concurrent.futures.ThreadPoolExecutor`.
-- SHA-256 idempotency check happens before opening the file, so parallel workers never double-process.
-- The pipeline is separated from the API process — at scale it moves to a separate worker container or a job queue without any API changes.
+**Design — now implemented (§16):**
+- `runner.py` uses a `ProcessPoolExecutor` (CPU stages) + `ThreadPoolExecutor` (I/O stages) two-pool design.
+- SHA-256 idempotency hashes are fetched in a single pre-run DB query; all CPU workers share the result.
+- Worker counts are configurable via `PIPELINE_CPU_WORKERS` / `PIPELINE_IO_WORKERS` env vars.
+- The pipeline is decoupled from the API process — at scale it moves to a separate worker container or job queue without any code changes.
 
-**Concrete later step:** Add `--workers N` CLI flag to runner.py. No schema changes needed.
+**Next step at larger scale:** Move the pipeline out of the FastAPI lifespan hook into a dedicated worker container driven by a job queue (Celery, RQ, or Temporal). The `run_pipeline()` signature stays identical.
 
 ### 13.2 Data Volume & Query Performance
 
@@ -2550,6 +2556,135 @@ ls docs/
 # 8. AI_USAGE.md is filled in
 cat AI_USAGE.md  # → non-empty, lists Claude/tools used
 ```
+
+---
+
+## 16. Concurrent Pipeline Architecture
+
+> **Status: implemented.** All code is in place; `make lint` (0 errors) and `make test-unit` (75/75) verified.
+
+### 16.1 Problem
+
+The original `runner.py` processed files in a sequential loop:
+
+```
+file 1 → hash → extract → validate → transform → load → commit
+file 2 → hash → extract → validate → transform → load → commit
+...
+```
+
+Each step blocked the next. On a 4-core machine with 10 files, the CPU sat mostly idle while each DB round-trip completed — and while the DB was busy, all four cores waited.
+
+### 16.2 Architecture
+
+Two pools connected by a bounded queue:
+
+```
+                        ┌──────────────────────────────────────┐
+  data/*.xlsm ──────►   │   ProcessPoolExecutor  (CPU pool)    │
+                        │   hash · extract · validate ·        │
+                        │   transform  (bypasses GIL)          │
+                        └─────────────────┬────────────────────┘
+                                          │  CPUResult objects
+                                          ▼
+                           queue.Queue(maxsize = IO_WORKERS × 3)
+                               (bounded — provides backpressure)
+                                          │
+                        ┌─────────────────▼────────────────────┐
+                        │   ThreadPoolExecutor  (I/O pool)     │
+                        │   lineage write · load · commit      │
+                        │   (I/O-bound — GIL released on DB)   │
+                        └──────────────────────────────────────┘
+```
+
+**Why `ProcessPoolExecutor` for CPU stages?**  
+openpyxl parsing, validation regex/math, and domain transformation are all pure-Python and CPU-bound. `ThreadPoolExecutor` would not help because CPython's GIL prevents true parallel Python execution. `ProcessPoolExecutor` spawns separate Python interpreters that each get their own GIL, giving real multicore parallelism.
+
+**Why `ThreadPoolExecutor` for I/O stages?**  
+DB writes release the GIL while waiting on the network. Multiple I/O threads can therefore overlap their commit latency with no GIL contention. Threads also share the SQLAlchemy `sessionmaker` and `per_file` list without pickling overhead.
+
+**Why `spawn` context?**  
+`multiprocessing.get_context("spawn")` forces each subprocess to start a clean Python interpreter. This prevents fork-inherited SQLAlchemy connection pool handles from being re-used in subprocesses — a common source of connection corruption on Linux/Docker.
+
+### 16.3 New Files
+
+| File | Responsibility |
+|------|---------------|
+| `src/api/pipeline/worker_cpu.py` | CPU worker function + `CPUResult` / `LineageEvent` dataclasses |
+| `src/api/pipeline/worker_io.py` | I/O consumer thread + `_StopSentinel` poison pill |
+
+#### `worker_cpu.py` — key types
+
+```python
+@dataclasses.dataclass
+class LineageEvent:
+    stage: str          # "source" | "extracted" | "validated"
+    source_ref: str
+    target_ref: str | None
+    status: str         # "success" | "failed"
+    metadata: dict[str, Any] | None = None
+
+@dataclasses.dataclass
+class CPUResult:
+    path: Path
+    filename: str
+    file_sha256: str
+    domain: DomainRecord | None      # None on skip / error
+    report: ValidationReport | None  # None on skip / error
+    raw_bytes: bytes | None          # None on skip / validation failure
+    lineage_events: list[LineageEvent]
+    error: str | None = None         # "validation_errors" | message | None
+    skipped: bool = False
+    duration_ms: int = 0
+```
+
+All fields are plain Python types — required for pickle-based inter-process communication.
+
+#### `worker_io.py` — sentinel pattern
+
+```python
+class _StopSentinel:
+    """Poison pill: each io_consumer exits when it dequeues this."""
+
+STOP_SENTINEL = _StopSentinel()
+```
+
+After the `ProcessPoolExecutor` context manager exits (all CPU futures done), `runner.py` puts one `STOP_SENTINEL` per I/O worker into the queue, then calls `result_queue.join()` to block until every item has been `task_done()`'d.
+
+### 16.4 Configuration
+
+| Setting | Env var | Default | Notes |
+|---------|---------|---------|-------|
+| CPU worker count | `PIPELINE_CPU_WORKERS` | `max(1, cpu_count − 1)` | Leaves one core for the API process |
+| I/O worker count | `PIPELINE_IO_WORKERS` | `2` | Two concurrent DB sessions |
+| Queue depth | — | `IO_WORKERS × 3` | Not configurable; derived to match backpressure to pool size |
+
+Both settings are declared in `src/api/config.py` via `pydantic_settings.BaseSettings` and read once at import time in `runner.py`.
+
+### 16.5 Idempotency With Parallel Workers
+
+Processed SHA-256 hashes are fetched in a **single query** before either pool starts:
+
+```python
+hash_session = session_factory()
+try:
+    processed_hashes = _get_processed_hashes(hash_session)
+finally:
+    hash_session.close()
+```
+
+The `processed_hashes: set[str]` is passed as an argument to each `cpu_worker` call. Because it is a plain `set[str]`, it serialises via pickle to each subprocess cleanly. No two subprocesses will double-process the same file: if a file was in the DB before the run started, its hash is in the set; if two identical files appear in the same batch, the second one is detected by the I/O worker's unique constraint and handled as a DB error (rolled back, recorded as `failed`).
+
+### 16.6 Thread Safety
+
+`per_file` is a plain `list` shared across all I/O threads. CPython's GIL makes `list.append` atomic, so no lock is needed. Each I/O thread appends only its own results; items may interleave but are never corrupted.
+
+### 16.7 Test Coverage
+
+| Test file | Count | What it covers |
+|-----------|-------|---------------|
+| `src/tests/unit/test_worker_cpu.py` | 11 | skip-known-hash, success fields, lineage events, missing-sheet error, validation failure, unexpected exception never raises, always returns `CPUResult` |
+| `src/tests/unit/test_worker_io.py` | 13 | stop sentinel, items before sentinel, skipped (no session opened), generic CPU error, validation failure with rule IDs, success (`load` called with right args), warnings → `passed_with_warnings`, DB exception → rollback, multiple items in order |
 
 ---
 
