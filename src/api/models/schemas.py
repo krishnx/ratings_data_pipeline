@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -80,6 +81,20 @@ class CompanyListItemOut(BaseModel):
     financial_risk_profile: str | None
 
 
+class CompanyListPageOut(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[CompanyListItemOut]
+
+
+class CompanySnapshotPageOut(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[CompanySnapshotOut]
+
+
 class CompareOut(BaseModel):
     as_of_date: datetime
     companies: list[CompanySnapshotOut]
@@ -108,10 +123,17 @@ class SnapshotListOut(BaseModel):
 
 class ValidationReportOut(BaseModel):
     passed: bool
-    errors: list[dict]
-    warnings: list[dict]
+    errors: list[dict[str, Any]]
+    warnings: list[dict[str, Any]]
     completeness_pct: float
     validity_pct: float
+
+
+class UploadListPageOut(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list["UploadListItemOut"]
 
 
 class UploadListItemOut(BaseModel):
@@ -134,7 +156,7 @@ class UploadDetailOut(BaseModel):
     pipeline_run_id: str
     byte_size: int | None
     validation_status: str
-    validation_report: dict | None
+    validation_report: dict[str, Any] | None
 
 
 class UploadStatsOut(BaseModel):

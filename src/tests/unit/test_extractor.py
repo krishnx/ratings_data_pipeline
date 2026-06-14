@@ -2,46 +2,39 @@
 Unit tests for MasterSheetExtractor using in-memory row fixtures.
 No I/O beyond reading real .xlsm files in integration tests.
 """
+
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from api.pipeline.exceptions import MissingSheetError
-from api.pipeline.extractor import MasterSheetExtractor, _normalize, _is_int_year
+from api.pipeline.extractor import MasterSheetExtractor, _is_int_year, _normalize
 from tests.fixtures.master_sheet_rows import A1_ROWS, B1_ROWS
 
-DATA_DIR = Path(__file__).parent.parent.parent.parent / "data_main" / "data"
+DATA_DIR = Path(__file__).parent.parent.parent.parent / "data"
 A1_FILE = DATA_DIR / "corporates_A_1.xlsm"
 B1_FILE = DATA_DIR / "corporates_B_1.xlsm"
 
 REAL_FILES_AVAILABLE = A1_FILE.exists()
 
 
-class FakeWorksheet:
-    def __init__(self, rows):
+class FakeSheetReader:
+    """Test double for SheetReader — returns canned rows without touching the filesystem."""
+
+    def __init__(self, rows: list[tuple], has_sheet: bool = True) -> None:
         self._rows = rows
+        self._has_sheet = has_sheet
 
-    def iter_rows(self, values_only=True):
-        return iter(self._rows)
-
-
-class FakeWorkbook:
-    def __init__(self, rows, include_master=True):
-        self.sheetnames = ["MASTER"] if include_master else ["Sheet1"]
-        self._ws = FakeWorksheet(rows)
-
-    def __getitem__(self, name):
-        return self._ws
-
-    def close(self):
-        pass
+    def read_rows(self, path, sheet_name: str) -> list[tuple]:
+        if not self._has_sheet:
+            raise MissingSheetError(f"No '{sheet_name}' sheet")
+        return self._rows
 
 
 def _make_extractor_with_rows(rows):
-    extractor = MasterSheetExtractor()
-    with patch("api.pipeline.extractor.openpyxl.load_workbook", return_value=FakeWorkbook(rows)), \
-         patch("api.pipeline.extractor.sha256_file", return_value="deadbeef"):
+    extractor = MasterSheetExtractor(reader=FakeSheetReader(rows))
+    with patch("api.pipeline.extractor.sha256_file", return_value="deadbeef"):
         return extractor.extract("fake.xlsm")
 
 
@@ -115,10 +108,8 @@ def test_optional_field_none():
 
 
 def test_missing_master_sheet():
-    extractor = MasterSheetExtractor()
-    wb_no_master = FakeWorkbook(A1_ROWS, include_master=False)
-    with patch("api.pipeline.extractor.openpyxl.load_workbook", return_value=wb_no_master), \
-         patch("api.pipeline.extractor.sha256_file", return_value="deadbeef"):
+    extractor = MasterSheetExtractor(reader=FakeSheetReader(A1_ROWS, has_sheet=False))
+    with patch("api.pipeline.extractor.sha256_file", return_value="deadbeef"):
         with pytest.raises(MissingSheetError):
             extractor.extract("no_master.xlsm")
 

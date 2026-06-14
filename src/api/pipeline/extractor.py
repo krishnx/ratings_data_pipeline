@@ -12,7 +12,9 @@ Edge cases handled:
   EC-8  Float vs int weights — always cast to float
   EC-9  Missing MASTER sheet → MissingSheetError
 """
+
 import hashlib
+import math
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -21,47 +23,9 @@ from typing import Any
 
 import openpyxl
 
+from api.pipeline.constants import LABEL_ALIASES, METRIC_FIELDS, SHEET_NAME
 from api.pipeline.exceptions import ExtractionError, MissingSheetError
-
-SHEET_NAME = "MASTER"
-
-LABEL_ALIASES: dict[str, str] = {
-    "rated entity": "entity_name",
-    "corporatesector": "corporate_sector",
-    "corporate sector": "corporate_sector",
-    "rating methodologies applied": "rating_methodologies",
-    "industry risk": "industry_names",
-    "industry risk score": "industry_risk_scores",
-    "industry weight": "industry_weights",
-    "segmentation criteria": "segmentation_criteria",
-    "reporting currency/units": "reporting_currency",
-    "country of origin": "country_of_origin",
-    "accounting principles": "accounting_principles",
-    "end of business year": "business_year_end_month",
-    "business risk profile": "business_risk_profile",
-    "(blended) industry risk profile": "blended_industry_risk_profile",
-    "competitive positioning": "competitive_positioning",
-    "market share": "market_share",
-    "diversification": "diversification",
-    "operating profitability": "operating_profitability",
-    "sector/company-specific factors (1)": "sector_specific_factor_1",
-    "sector/company-specific factors (2)": "sector_specific_factor_2",
-    "financial risk profile": "financial_risk_profile",
-    "leverage": "leverage",
-    "interest cover": "interest_cover",
-    "cash flow cover": "cash_flow_cover",
-    "[scope credit metrics]": "scope_credit_metrics_header",
-}
-
-# Field names in the order the metric rows appear after the header
-_METRIC_FIELDS = [
-    "ebitda_interest_cover",
-    "debt_ebitda",
-    "ffo_debt",
-    "loan_value",
-    "focf_debt",
-    "liquidity",
-]
+from api.pipeline.protocols import SheetReader
 
 
 @dataclass
@@ -117,6 +81,24 @@ class RawRecord:
     credit_metrics: list[CreditMetricYear] = field(default_factory=list)
 
 
+class OpenpyxlSheetReader:
+    """Production SheetReader: opens an .xlsm with openpyxl and returns non-empty rows."""
+
+    def read_rows(self, path: str | Path, sheet_name: str) -> list[tuple[Any, ...]]:
+        try:
+            wb = openpyxl.load_workbook(str(path), read_only=True, keep_vba=True)
+        except Exception as exc:
+            raise ExtractionError(f"Cannot open {Path(path).name}: {exc}") from exc
+
+        if sheet_name not in wb.sheetnames:
+            raise MissingSheetError(f"No '{sheet_name}' sheet in {Path(path).name}")
+
+        ws = wb[sheet_name]
+        rows = [r for r in ws.iter_rows(values_only=True) if any(v is not None for v in r)]  # EC-6
+        wb.close()
+        return rows
+
+
 def sha256_file(path: str | Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -134,7 +116,7 @@ def _normalize(raw: Any) -> str:
     return " ".join(s.strip().split()).lower()
 
 
-def _non_none(row: tuple, start: int = 2) -> list[Any]:
+def _non_none(row: tuple[Any, ...], start: int = 2) -> list[Any]:
     return [v for v in row[start:] if v is not None]
 
 
@@ -142,7 +124,6 @@ def _to_float(v: Any) -> float | None:
     if v is None:
         return None
     try:
-        import math
         f = float(v)
         return None if not math.isfinite(f) else f
     except (TypeError, ValueError):
@@ -158,22 +139,13 @@ def _is_int_year(v: Any) -> bool:
 
 
 class MasterSheetExtractor:
+    def __init__(self, reader: SheetReader | None = None) -> None:
+        self._reader: SheetReader = reader or OpenpyxlSheetReader()
+
     def extract(self, path: str | Path) -> RawRecord:
         path = Path(path)
         file_sha256 = sha256_file(path)
-
-        try:
-            wb = openpyxl.load_workbook(str(path), read_only=True, keep_vba=True)
-        except Exception as exc:
-            raise ExtractionError(f"Cannot open {path.name}: {exc}") from exc
-
-        if SHEET_NAME not in wb.sheetnames:
-            raise MissingSheetError(f"No '{SHEET_NAME}' sheet in {path.name}")
-
-        ws = wb[SHEET_NAME]
-        # EC-6: strip fully-empty rows
-        all_rows: list[tuple] = [r for r in ws.iter_rows(values_only=True) if any(v is not None for v in r)]
-        wb.close()
+        all_rows: list[tuple[Any, ...]] = self._reader.read_rows(path, SHEET_NAME)
 
         label_map: dict[str, list[Any]] = {}
         credit_header_idx: int | None = None
@@ -194,7 +166,7 @@ class MasterSheetExtractor:
             if canonical == "scope_credit_metrics_header":
                 credit_header_idx = row_idx
                 year_cols = [ci for ci, v in enumerate(row[2:], 2) if v is not None and _is_int_year(v)]
-                year_values = [int(row[ci]) for ci in year_cols]  # type: ignore[arg-type]
+                year_values = [int(row[ci]) for ci in year_cols]
                 label_map[canonical] = year_values
                 continue
 
@@ -204,15 +176,18 @@ class MasterSheetExtractor:
         names = label_map.get("industry_names", [])
         scores = label_map.get("industry_risk_scores", [])
         weights_raw = label_map.get("industry_weights", [])
-        n = max(len(names), len(scores), len(weights_raw))
+        num_names = len(names)
+        num_scores = len(scores)
+        num_weights = len(weights_raw)
+        num_industry_segments = max(num_names, num_scores, num_weights)
         industry_segments = [
             IndustrySegment(
                 index=i,
-                industry_name=str(names[i]) if i < len(names) else "",
-                risk_score=str(scores[i]) if i < len(scores) else "",
-                weight=float(weights_raw[i]) if i < len(weights_raw) else 0.0,  # EC-8
+                industry_name=str(names[i]) if i < num_names else "",
+                risk_score=str(scores[i]) if i < num_scores else "",
+                weight=float(weights_raw[i]) if i < num_weights else 0.0,  # EC-8
             )
-            for i in range(n)
+            for i in range(num_industry_segments)
         ]
 
         credit_metrics = self._parse_credit_metrics(all_rows, credit_header_idx, year_cols, year_values)
@@ -252,7 +227,7 @@ class MasterSheetExtractor:
 
     def _parse_credit_metrics(
         self,
-        all_rows: list[tuple],
+        all_rows: list[tuple[Any, ...]],
         header_idx: int | None,
         year_cols: list[int],
         year_values: list[int],
@@ -272,7 +247,7 @@ class MasterSheetExtractor:
             if not (norm.startswith("scope-adjusted") or norm == "liquidity"):
                 continue
 
-            field_name = _METRIC_FIELDS[metric_rows_seen]
+            field_name = METRIC_FIELDS[metric_rows_seen]
             for yr in year_values:
                 ci = year_col_map.get(yr)
                 val = _to_float(row[ci]) if ci is not None and ci < len(row) else None

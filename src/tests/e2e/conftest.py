@@ -1,6 +1,7 @@
 """
 E2E test fixtures — spin up the full docker-compose stack and tear it down.
 """
+
 import subprocess
 import time
 from pathlib import Path

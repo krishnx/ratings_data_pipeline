@@ -7,23 +7,24 @@ from api.config import settings
 from api.db.session import get_session
 from api.models.orm import DimCompany, FactCompanySnapshot
 from api.models.schemas import CompanySnapshotOut, SnapshotListItemOut, SnapshotListOut
+from api.routers.companies import _snapshot_to_dict
 
 router = APIRouter(prefix="/snapshots", tags=["snapshots"])
 
 
-def _to_list_item(s: FactCompanySnapshot, entity_name: str) -> SnapshotListItemOut:
+def _to_list_item(snapshot: FactCompanySnapshot, entity_name: str) -> SnapshotListItemOut:
     return SnapshotListItemOut(
-        id=s.id,
-        company_id=s.company_id,
+        id=snapshot.id,
+        company_id=snapshot.company_id,
         entity_name=entity_name,
-        version_number=s.version_number,
-        valid_from=s.valid_from,
-        valid_to=s.valid_to,
-        corporate_sector=s.corporate_sector,
-        reporting_currency=s.reporting_currency,
-        country_of_origin=s.country_of_origin,
-        business_risk_profile=s.business_risk_profile,
-        financial_risk_profile=s.financial_risk_profile,
+        version_number=snapshot.version_number,
+        valid_from=snapshot.valid_from,
+        valid_to=snapshot.valid_to,
+        corporate_sector=snapshot.corporate_sector,
+        reporting_currency=snapshot.reporting_currency,
+        country_of_origin=snapshot.country_of_origin,
+        business_risk_profile=snapshot.business_risk_profile,
+        financial_risk_profile=snapshot.financial_risk_profile,
     )
 
 
@@ -39,10 +40,9 @@ def list_snapshots(
     page: int = Query(1, ge=1),
     page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
     session: Session = Depends(get_session),
-):
-    q = (
-        session.query(FactCompanySnapshot, DimCompany.entity_name)
-        .join(DimCompany, DimCompany.id == FactCompanySnapshot.company_id)
+) -> SnapshotListOut:
+    q = session.query(FactCompanySnapshot, DimCompany.entity_name).join(
+        DimCompany, DimCompany.id == FactCompanySnapshot.company_id
     )
     if company_id is not None:
         q = q.filter(FactCompanySnapshot.company_id == company_id)
@@ -67,16 +67,23 @@ def list_snapshots(
     )
 
 
-@router.get("/latest", summary="Latest snapshot for each company", response_model=list[SnapshotListItemOut])
-def get_latest_snapshots(session: Session = Depends(get_session)):
-    rows = (
+@router.get("/latest", summary="Latest snapshot for each company", response_model=SnapshotListOut)
+def get_latest_snapshots(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
+    session: Session = Depends(get_session),
+) -> SnapshotListOut:
+    base_query = (
         session.query(FactCompanySnapshot, DimCompany.entity_name)
         .join(DimCompany, DimCompany.id == FactCompanySnapshot.company_id)
         .filter(FactCompanySnapshot.valid_to.is_(None))
-        .order_by(DimCompany.entity_name)
-        .all()
     )
-    return [_to_list_item(s, name) for s, name in rows]
+    total_count = base_query.count()
+    rows = base_query.order_by(DimCompany.entity_name).offset((page - 1) * page_size).limit(page_size).all()
+    return SnapshotListOut(
+        total_count=total_count,
+        items=[_to_list_item(snapshot, name) for snapshot, name in rows],
+    )
 
 
 @router.get(
@@ -84,10 +91,8 @@ def get_latest_snapshots(session: Session = Depends(get_session)):
     summary="Full snapshot detail including segments and metrics",
     response_model=CompanySnapshotOut,
 )
-def get_snapshot(snapshot_id: int, session: Session = Depends(get_session)):
-    from api.routers.companies import _snapshot_to_dict
-
-    s = (
+def get_snapshot(snapshot_id: int, session: Session = Depends(get_session)) -> CompanySnapshotOut:
+    snapshot = (
         session.query(FactCompanySnapshot)
         .options(
             joinedload(FactCompanySnapshot.company),
@@ -97,6 +102,6 @@ def get_snapshot(snapshot_id: int, session: Session = Depends(get_session)):
         .filter(FactCompanySnapshot.id == snapshot_id)
         .one_or_none()
     )
-    if s is None:
+    if snapshot is None:
         raise HTTPException(status_code=404, detail=f"Snapshot with id={snapshot_id} does not exist")
-    return CompanySnapshotOut(**_snapshot_to_dict(s, s.company.entity_name))
+    return CompanySnapshotOut(**_snapshot_to_dict(snapshot, snapshot.company.entity_name))

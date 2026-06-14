@@ -2,11 +2,13 @@
 Unit tests for the 16-rule validation framework.
 All tests are pure Python — no I/O.
 """
+
+from datetime import datetime, timezone
+
 from api.pipeline.extractor import CreditMetricYear, IndustrySegment, RawRecord
 from api.pipeline.validator import (
     RULE_REGISTRY,
     Severity,
-    validate,
     r01_entity_name_present,
     r05_industry_segments_non_empty,
     r07_metric_years_valid,
@@ -15,8 +17,8 @@ from api.pipeline.validator import (
     r13_risk_scores_match_pattern,
     r14_liquidity_adjustment_format,
     r15_credit_metrics_span_multiple_years,
+    validate,
 )
-from datetime import datetime, timezone
 
 
 def _make_record(**kwargs) -> RawRecord:
@@ -81,6 +83,7 @@ def test_R10_weights_sum_valid():
     segs = [IndustrySegment(0, "A", "BBB", 0.15), IndustrySegment(1, "B", "BB", 0.85)]
     record = _make_record(industry_segments=segs)
     from api.pipeline.validator import r10_weights_sum_to_one
+
     r = r10_weights_sum_to_one(record)
     assert r.passed
 
@@ -89,6 +92,7 @@ def test_R10_weights_sum_invalid():
     segs = [IndustrySegment(0, "A", "BBB", 0.15), IndustrySegment(1, "B", "BB", 0.70)]
     record = _make_record(industry_segments=segs)
     from api.pipeline.validator import r10_weights_sum_to_one
+
     r = r10_weights_sum_to_one(record)
     assert not r.passed
     assert r.severity == Severity.ERROR
@@ -98,6 +102,7 @@ def test_R10_weight_tolerance():
     segs = [IndustrySegment(0, "A", "BBB", 0.999)]
     record = _make_record(industry_segments=segs)
     from api.pipeline.validator import r10_weights_sum_to_one
+
     r = r10_weights_sum_to_one(record)
     assert r.passed  # within ±0.01
 
@@ -105,6 +110,7 @@ def test_R10_weight_tolerance():
 def test_R11_zero_weight():
     segs = [IndustrySegment(0, "A", "BBB", 0.0)]
     from api.pipeline.validator import r11_each_weight_in_range
+
     r = r11_each_weight_in_range(_make_record(industry_segments=segs))
     assert not r.passed
 
@@ -112,6 +118,7 @@ def test_R11_zero_weight():
 def test_R11_over_one_weight():
     segs = [IndustrySegment(0, "A", "BBB", 1.1)]
     from api.pipeline.validator import r11_each_weight_in_range
+
     r = r11_each_weight_in_range(_make_record(industry_segments=segs))
     assert not r.passed
 
@@ -125,6 +132,7 @@ def test_R07_invalid_year():
 
 def test_R08_nan_metric():
     import math
+
     metrics = [CreditMetricYear(2020, math.nan, None, None, None, None, None)]
     r = r08_metric_values_finite(_make_record(credit_metrics=metrics))
     assert not r.passed
@@ -143,8 +151,12 @@ def test_R12_known_currency_passes():
 
 def test_R13_valid_rating():
     segs = [IndustrySegment(0, "A", "BBB+", 1.0)]
-    record = _make_record(industry_segments=segs, business_risk_profile="BBB+",
-                          blended_industry_risk_profile="BBB", financial_risk_profile="BB+")
+    record = _make_record(
+        industry_segments=segs,
+        business_risk_profile="BBB+",
+        blended_industry_risk_profile="BBB",
+        financial_risk_profile="BB+",
+    )
     r = r13_risk_scores_match_pattern(record)
     assert r.passed
 

@@ -1,6 +1,7 @@
 """
 OpenAPI completeness gate — all endpoints must be documented.
 """
+
 EXPECTED_ENDPOINTS = {
     ("get", "/companies"),
     ("get", "/companies/{company_id}"),
@@ -21,10 +22,7 @@ EXPECTED_ENDPOINTS = {
 def test_openapi_all_endpoints_present(client):
     schema = client.get("/openapi.json").json()
     found = {
-        (method, path)
-        for path, methods in schema["paths"].items()
-        for method in methods
-        if method != "parameters"
+        (method, path) for path, methods in schema["paths"].items() for method in methods if method != "parameters"
     }
     missing = EXPECTED_ENDPOINTS - found
     assert not missing, f"Missing from OpenAPI schema: {missing}"

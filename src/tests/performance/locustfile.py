@@ -2,6 +2,7 @@
 Three user personas for load testing.
 Run: locust -f tests/performance/locustfile.py --config=tests/performance/locust.conf
 """
+
 import random
 
 from locust import HttpUser, between, task
@@ -9,6 +10,7 @@ from locust import HttpUser, between, task
 
 class AnalystUser(HttpUser):
     """Analyst — read-heavy, 60% of traffic."""
+
     weight = 6
     wait_time = between(0.5, 2)
     company_ids: list[int] = []
@@ -43,6 +45,7 @@ class AnalystUser(HttpUser):
 
 class BiToolUser(HttpUser):
     """BI Tool — bulk snapshot pulls, 30% of traffic."""
+
     weight = 3
     wait_time = between(1, 3)
 
@@ -62,6 +65,7 @@ class BiToolUser(HttpUser):
 
 class AuditUser(HttpUser):
     """Audit / Compliance — upload inspection, 10% of traffic."""
+
     weight = 1
     wait_time = between(2, 5)
     upload_ids: list[int] = []

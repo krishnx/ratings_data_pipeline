@@ -8,6 +8,7 @@ SCD2 close-out:
   4. Insert upload_audit + upload_file_store.
   5. Commit everything atomically.
 """
+
 import logging
 from datetime import datetime, timezone
 
@@ -21,8 +22,26 @@ from api.models.orm import (
     UploadAudit,
     UploadFileStore,
 )
+from api.pipeline.protocols import FileStore
 from api.pipeline.transformer import DomainRecord
 from api.pipeline.validator import ValidationReport
+
+
+class DatabaseFileStore:
+    """Production FileStore: persists raw bytes in the upload_file_store table."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def save(self, upload_id: int, data: bytes) -> None:
+        self._session.add(UploadFileStore(upload_id=upload_id, raw_bytes=data))
+
+    def load(self, upload_id: int) -> bytes:
+        row = self._session.query(UploadFileStore).filter(UploadFileStore.upload_id == upload_id).one_or_none()
+        if row is None:
+            raise FileNotFoundError(f"No file stored for upload_id={upload_id}")
+        return bytes(row.raw_bytes)
+
 
 log = logging.getLogger(__name__)
 
@@ -35,16 +54,14 @@ def load(
     filename: str,
     file_sha256: str,
     run_id: str,
+    file_store: FileStore | None = None,
 ) -> tuple[int, int]:
     """Load one file. Returns (upload_id, snapshot_id)."""
+    _file_store: FileStore = file_store or DatabaseFileStore(session)
     now = datetime.now(timezone.utc)
 
     # ── 1. Upsert dim_company ──────────────────────────────────────────
-    company = (
-        session.query(DimCompany)
-        .filter(DimCompany.entity_name == domain.entity_name)
-        .one_or_none()
-    )
+    company = session.query(DimCompany).filter(DimCompany.entity_name == domain.entity_name).one_or_none()
     if company is None:
         company = DimCompany(entity_name=domain.entity_name, created_at=now)
         session.add(company)
@@ -52,9 +69,7 @@ def load(
 
     # ── 2. Insert upload_audit ─────────────────────────────────────────
     validation_status = (
-        "passed" if (report.passed and not report.warnings)
-        else "passed_with_warnings" if report.passed
-        else "failed"
+        "passed" if (report.passed and not report.warnings) else "passed_with_warnings" if report.passed else "failed"
     )
     audit = UploadAudit(
         filename=filename,
@@ -69,7 +84,7 @@ def load(
     session.flush()
 
     # ── 3. Store raw bytes ─────────────────────────────────────────────
-    session.add(UploadFileStore(upload_id=audit.id, raw_bytes=raw_bytes))
+    _file_store.save(audit.id, raw_bytes)
 
     # ── 4. SCD2 close-out ─────────────────────────────────────────────
     open_snapshot = (
@@ -147,6 +162,10 @@ def load(
     session.commit()
     log.info(
         "Loaded %s: company_id=%d upload_id=%d snapshot_id=%d version=%d",
-        filename, company.id, audit.id, snapshot.id, next_version,
+        filename,
+        company.id,
+        audit.id,
+        snapshot.id,
+        next_version,
     )
     return audit.id, snapshot.id

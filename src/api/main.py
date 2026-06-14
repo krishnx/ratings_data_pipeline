@@ -4,6 +4,7 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from api.config import settings
 from api.db.session import SessionLocal
@@ -22,8 +23,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     log.info("Starting pipeline run on DATA_DIR=%s", settings.data_dir)
     try:
         result = run_pipeline(settings.data_dir, SessionLocal)
-        log.info("Pipeline finished: processed=%d skipped=%d failed=%d",
-                 result["files_processed"], result["files_skipped"], result["files_failed"])
+        log.info(
+            "Pipeline finished: processed=%d skipped=%d failed=%d",
+            result["files_processed"],
+            result["files_skipped"],
+            result["files_failed"],
+        )
     except Exception as exc:
         log.exception("Pipeline failed at startup: %s", exc)
     yield
@@ -42,9 +47,7 @@ app.include_router(uploads.router)
 
 
 @app.get("/health", summary="Health check", tags=["health"])
-def health_check():
-    from sqlalchemy import text
-
+def health_check() -> dict[str, str]:
     try:
         session = SessionLocal()
         session.execute(text("SELECT 1"))

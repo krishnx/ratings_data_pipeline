@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
-from tests.fixtures.master_sheet_rows import A1_ROWS
 from api.pipeline.extractor import MasterSheetExtractor
+from tests.fixtures.master_sheet_rows import A1_ROWS
 
 
 class FakeWorksheet:
@@ -21,6 +21,8 @@ class FakeWorkbook:
 
 def test_bench_extract_rows(benchmark):
     extractor = MasterSheetExtractor()
-    with patch("api.pipeline.extractor.openpyxl.load_workbook", return_value=FakeWorkbook()), \
-         patch("api.pipeline.extractor.sha256_file", return_value="deadbeef"):
+    with (
+        patch("api.pipeline.extractor.openpyxl.load_workbook", return_value=FakeWorkbook()),
+        patch("api.pipeline.extractor.sha256_file", return_value="deadbeef"),
+    ):
         benchmark(extractor.extract, "fake.xlsm")

@@ -1,33 +1,47 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from api.config import settings
 from api.db.session import get_session
-from api.models.orm import FactCompanySnapshot, UploadAudit, UploadFileStore
-from api.models.schemas import UploadDetailOut, UploadListItemOut, UploadStatsOut
+from api.models.orm import FactCompanySnapshot, UploadAudit
+from api.models.schemas import UploadDetailOut, UploadListItemOut, UploadListPageOut, UploadStatsOut
+from api.pipeline.loader import DatabaseFileStore
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
 
-@router.get("", summary="List all ingested files", response_model=list[UploadListItemOut])
-def list_uploads(session: Session = Depends(get_session)):
-    rows = session.query(UploadAudit).order_by(UploadAudit.uploaded_at.desc()).all()
-    return [
+@router.get("", summary="List all ingested files", response_model=UploadListPageOut)
+def list_uploads(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
+    session: Session = Depends(get_session),
+) -> UploadListPageOut:
+    total = session.query(func.count(UploadAudit.id)).scalar()
+    rows = (
+        session.query(UploadAudit)
+        .order_by(UploadAudit.uploaded_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    items = [
         UploadListItemOut(
-            id=r.id,
-            filename=r.filename,
-            uploaded_at=r.uploaded_at,
-            pipeline_run_id=r.pipeline_run_id,
-            byte_size=r.byte_size,
-            validation_status=r.validation_status,
+            id=row.id,
+            filename=row.filename,
+            uploaded_at=row.uploaded_at,
+            pipeline_run_id=row.pipeline_run_id,
+            byte_size=row.byte_size,
+            validation_status=row.validation_status,
         )
-        for r in rows
+        for row in rows
     ]
+    return UploadListPageOut(total=total, page=page, page_size=page_size, items=items)
 
 
 @router.get("/stats", summary="Aggregated upload and pipeline statistics", response_model=UploadStatsOut)
-def get_upload_stats(session: Session = Depends(get_session)):
+def get_upload_stats(session: Session = Depends(get_session)) -> UploadStatsOut:
     total = session.query(UploadAudit).count()
     passed = session.query(UploadAudit).filter(UploadAudit.validation_status == "passed").count()
     warnings = session.query(UploadAudit).filter(UploadAudit.validation_status == "passed_with_warnings").count()
@@ -64,7 +78,7 @@ def get_upload_stats(session: Session = Depends(get_session)):
 
 
 @router.get("/{upload_id}/details", summary="Upload detail with validation report", response_model=UploadDetailOut)
-def get_upload_details(upload_id: int, session: Session = Depends(get_session)):
+def get_upload_details(upload_id: int, session: Session = Depends(get_session)) -> UploadDetailOut:
     row = session.query(UploadAudit).filter(UploadAudit.id == upload_id).one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail=f"Upload with id={upload_id} does not exist")
@@ -80,14 +94,15 @@ def get_upload_details(upload_id: int, session: Session = Depends(get_session)):
 
 
 @router.get("/{upload_id}/file", summary="Download the original .xlsm file")
-def download_file(upload_id: int, session: Session = Depends(get_session)):
-    store = session.query(UploadFileStore).filter(UploadFileStore.upload_id == upload_id).one_or_none()
-    if store is None:
+def download_file(upload_id: int, session: Session = Depends(get_session)) -> Response:
+    try:
+        file_bytes = DatabaseFileStore(session).load(upload_id)
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"File for upload id={upload_id} not found")
 
     audit = session.query(UploadAudit).filter(UploadAudit.id == upload_id).one()
     return Response(
-        content=bytes(store.raw_bytes),
+        content=file_bytes,
         media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{audit.filename}"'},
     )
